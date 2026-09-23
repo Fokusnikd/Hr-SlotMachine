@@ -1,0 +1,71 @@
+name: Build & deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    # Каждый понедельник в 03:00 UTC — обновляем базу кандидатов, даже если код не менялся.
+    - cron: '0 3 * * 1'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Не даём двум деплоям идти параллельно, но и не отменяем уже идущий на середине.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Неделя (ключ кэша) — раз в неделю кэш обновляется полностью
+        id: week
+        run: echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
+
+      # Сырые снимки резюме (data/raw) НИКОГДА не коммитятся в репозиторий — только тут, в кэше Actions,
+      # и сами протухают через PURGE_AFTER (см. scripts/lib.ts) при каждом запуске сборщика.
+      - name: Кэш сырых резюме
+        uses: actions/cache@v4
+        with:
+          path: data/raw
+          key: raw-resumes-${{ steps.week.outputs.week }}
+          restore-keys: |
+            raw-resumes-
+
+      - run: npm ci
+
+      # Только JSON Resume: сборщик GitHub (db:github) пока не проверен в проде, см. README.
+      - name: Обновить базу кандидатов из JSON Resume Registry
+        run: npm run db:jsonresume && npm run db:build
+
+      - run: npm test
+
+      - name: Собрать прод-бандл
+        run: npm run build
+        env:
+          GITHUB_PAGES_BASE: /${{ github.event.repository.name }}/
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

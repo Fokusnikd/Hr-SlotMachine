@@ -1,0 +1,11 @@
+node_modules
+dist
+.env.local
+*.log
+
+# Сырые снимки источников и собранная база — персональные данные людей,
+# в git не попадают. data/removed.json (список на забвение) — попадает,
+# он не содержит ничего, кроме юзернеймов.
+data/raw/
+public/data/candidates.json
+_to_delete/
