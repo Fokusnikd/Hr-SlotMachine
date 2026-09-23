@@ -13,18 +13,18 @@ function mulberry32(seed: number) {
   }
 }
 
-const FIRST_M = ['Алексей', 'Дмитрий', 'Иван', 'Максим', 'Никита', 'Артём', 'Сергей', 'Павел', 'Егор', 'Кирилл', 'Роман', 'Тимур']
-const FIRST_F = ['Анна', 'Мария', 'Екатерина', 'Ольга', 'Дарья', 'Алина', 'Софья', 'Полина', 'Ксения', 'Вера', 'Юлия', 'Ирина']
-const LAST = ['Смирнов', 'Кузнецов', 'Попов', 'Васильев', 'Соколов', 'Новиков', 'Морозов', 'Волков', 'Лебедев', 'Козлов', 'Орлов', 'Зайцев', 'Белов', 'Громов']
-const CITIES = ['Москва', 'Санкт-Петербург', 'Казань', 'Новосибирск', 'Екатеринбург', 'Нижний Новгород', 'Алматы', 'Тбилиси', 'Белград', 'Удалённо']
+const FIRST_M = ['Alex', 'Daniel', 'Ethan', 'Max', 'Nathan', 'Arthur', 'Sam', 'Paul', 'Eric', 'Cole', 'Roman', 'Tim']
+const FIRST_F = ['Anna', 'Maria', 'Kate', 'Olivia', 'Daria', 'Alina', 'Sophia', 'Paula', 'Jane', 'Vera', 'Julia', 'Irene']
+const LAST = ['Smith', 'Turner', 'Cooper', 'Baker', 'Fisher', 'Newman', 'Foster', 'Wolfe', 'Byrd', 'Cole', 'Eagle', 'Hunter', 'White', 'Gray']
+const CITIES = ['Berlin', 'Austin', 'Toronto', 'Warsaw', 'Lisbon', 'Bangalore', 'Singapore', 'Amsterdam', 'Dublin', 'Remote']
 const BIOS = [
-  'Люблю, когда сложное становится простым.',
-  'Пишу код, который не стыдно читать через год.',
-  'Довожу фичи до прода и не боюсь легаси.',
-  'Менторю джунов, выступаю на митапах.',
-  'Open source по вечерам, продакшен днём.',
-  'Автоматизирую всё, что делается дважды.',
-  'Считаю метрики до и после каждого релиза.',
+  'I love when the complex becomes simple.',
+  "I write code that's not embarrassing to read a year later.",
+  "I ship features to production and I'm not afraid of legacy code.",
+  'I mentor juniors and speak at meetups.',
+  'Open source by night, production by day.',
+  'I automate anything I do twice.',
+  'I track metrics before and after every release.',
 ]
 
 function similarProfilesUrl(skills: string[]): string {
@@ -43,14 +43,14 @@ export function makeMockCandidates(count = 40, seed = 20260922): Candidate[] {
     const role = ROLES[i % ROLES.length]
     const female = rng() < 0.45
     const first = pick(female ? FIRST_F : FIRST_M)
-    const last = pick(LAST) + (female ? 'а' : '')
+    const last = pick(LAST)
     const extras = [...role.extra].sort(() => rng() - 0.5).slice(0, 2 + Math.floor(rng() * 3))
     const skills = [...new Set([...role.core, ...extras])]
     const years = 1 + Math.floor(rng() * 10)
     out.push({
       id: `mock-${i}`,
       name: `${first} ${last}`,
-      title: `${role.title}, ${years} ${years === 1 ? 'год' : years < 5 ? 'года' : 'лет'} опыта`,
+      title: `${role.title}, ${years} ${years === 1 ? 'year' : 'years'} of experience`,
       location: pick(CITIES),
       bio: pick(BIOS),
       url: similarProfilesUrl(skills),

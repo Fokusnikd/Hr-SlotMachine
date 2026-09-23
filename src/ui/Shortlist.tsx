@@ -6,7 +6,7 @@ import type { Candidate } from '../game/types'
 function exportCsv(list: Candidate[]) {
   const esc = (v: string | undefined) => `"${(v ?? '').replace(/"/g, '""')}"`
   const rows = [
-    ['Имя', 'Логин', 'Должность', 'Локация', 'Навыки', 'Ссылка', 'Источник'],
+    ['Name', 'Login', 'Title', 'Location', 'Skills', 'URL', 'Source'],
     ...list.map((c) => [c.name, c.login, c.title, c.location, c.skills.map((s) => getSkill(s).label).join(', '), c.url, c.source]),
   ]
   const csv = '﻿' + rows.map((r) => r.map(esc).join(';')).join('\n')
@@ -27,17 +27,17 @@ export function Shortlist({ open, onClose }: { open: boolean; onClose: () => voi
       <div className={`scrim ${open ? 'scrim--open' : ''}`} onClick={onClose} />
       <aside className={`drawer ${open ? 'drawer--open' : ''}`} aria-hidden={!open}>
         <div className="drawer__head">
-          <h2>⭐ Шорт-лист</h2>
+          <h2>⭐ Shortlist</h2>
           <div className="drawer__tools">
             <button className="btn btn--ghost btn--sm" disabled={!list.length} onClick={() => exportCsv(list)}>
               CSV
             </button>
-            <button className="icon-btn" onClick={onClose} aria-label="Закрыть">
+            <button className="icon-btn" onClick={onClose} aria-label="Close">
               ✕
             </button>
           </div>
         </div>
-        {!list.length && <p className="muted drawer__empty">Пока пусто. Крутите барабаны и сохраняйте тех, кто понравился.</p>}
+        {!list.length && <p className="muted drawer__empty">Nothing here yet. Spin the reels and save the ones you like.</p>}
         <ul className="shortlist">
           {list.map((c) => (
             <li key={c.id} className="shortlist__item">
@@ -53,7 +53,7 @@ export function Shortlist({ open, onClose }: { open: boolean; onClose: () => voi
                   ))}
                 </div>
               </div>
-              <button className="icon-btn icon-btn--sm" onClick={() => remove(c.id)} aria-label={`Убрать ${c.name}`}>
+              <button className="icon-btn icon-btn--sm" onClick={() => remove(c.id)} aria-label={`Remove ${c.name}`}>
                 ✕
               </button>
             </li>

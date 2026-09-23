@@ -43,42 +43,42 @@ export function HUD({ onOpenShortlist, onOpenSettings }: { onOpenShortlist: () =
         <span className="brand__logo">🎰</span>
         <span className="brand__name">HR&nbsp;Gacha</span>
       </div>
-      <div className="stats" aria-label="Статистика">
+      <div className="stats" aria-label="Stats">
         <span className="datasource">
           <span className={`dot ${db.status === 'loading' ? 'dot--loading' : db.status === 'demo' ? 'dot--mock' : 'dot--live'}`} />
           {db.status === 'loading'
-            ? 'Загружаем базу…'
+            ? 'Loading database…'
             : db.status === 'demo'
-              ? 'Демо-кандидаты'
-              : `${filter.trim() || source !== 'all' ? [source !== 'all' ? (source === 'github' ? 'GitHub' : 'JSON Resume') : '', describeFilter(filter)].filter(Boolean).join(' · ') + ' — п' : 'П'}ул: ${pool.total.toLocaleString('ru-RU')}`}
+              ? 'Demo candidates'
+              : `${filter.trim() || source !== 'all' ? [source !== 'all' ? (source === 'github' ? 'GitHub' : 'JSON Resume') : '', describeFilter(filter)].filter(Boolean).join(' · ') + ' — p' : 'P'}ool: ${pool.total.toLocaleString('en-US')}`}
         </span>
-        <span title="Ещё не выпадали и имеют 3+ выбранных навыка — могут выпасть">
-          Подходят: {pool.eligible.toLocaleString('ru-RU')}
+        <span title="Haven't appeared yet and have 3+ selected skills — may appear">
+          Eligible: {pool.eligible.toLocaleString('en-US')}
         </span>
-        <span title="Уже выпадали (шорт-лист или обмен) — повторно не выпадут">Выпали: {pool.seen}
+        <span title="Already appeared (shortlisted or exchanged) — won't appear again">Seen: {pool.seen}
         </span>
         <span>
-          {skillCount} {plural(skillCount, 'навык', 'навыка', 'навыков')}
+          {skillCount} {plural(skillCount, 'skill', 'skills', 'skills')}
         </span>
-        <span>Спинов: {stats.spins}</span>
-        <span>Находок: {stats.wins}</span>
+        <span>Spins: {stats.spins}</span>
+        <span>Finds: {stats.wins}</span>
       </div>
       <div className="topbar__right">
         {broke && (
           <button className="btn btn--refill btn--sm" onClick={refill}>
-            Бюджет у HRD +{REFILL_AMOUNT}
+            Ask HRD for budget +{REFILL_AMOUNT}
           </button>
         )}
-        <div className="credits" title="Кредиты">
+        <div className="credits" title="Credits">
           <span className="coin" aria-hidden>
             ◎
           </span>
           {shown}
         </div>
         <button className="btn btn--ghost" onClick={onOpenShortlist}>
-          ⭐ <span className="hide-sm">Шорт-лист</span> <span className="badge">{shortlistCount}</span>
+          ⭐ <span className="hide-sm">Shortlist</span> <span className="badge">{shortlistCount}</span>
         </button>
-        <button className="icon-btn" onClick={onOpenSettings} aria-label="Настройки">
+        <button className="icon-btn" onClick={onOpenSettings} aria-label="Settings">
           ⚙
         </button>
       </div>

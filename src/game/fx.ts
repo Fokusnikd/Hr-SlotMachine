@@ -6,14 +6,14 @@ import type { SkillId } from './types'
  * зависят от силы выигрыша и добавляются поверх.
  */
 export const FX_LIST = [
-  { id: 'pop', label: 'Выпрыгивание' },
-  { id: 'jelly', label: 'Желе' },
-  { id: 'jump', label: 'Прыжок' },
-  { id: 'shine', label: 'Блик' },
-  { id: 'ring', label: 'Волна' },
-  { id: 'sparks', label: 'Искры' },
-  { id: 'swing', label: 'Качание' },
-  { id: 'heartbeat', label: 'Пульс' },
+  { id: 'pop', label: 'Pop' },
+  { id: 'jelly', label: 'Jelly' },
+  { id: 'jump', label: 'Jump' },
+  { id: 'shine', label: 'Shine' },
+  { id: 'ring', label: 'Wave' },
+  { id: 'sparks', label: 'Sparks' },
+  { id: 'swing', label: 'Swing' },
+  { id: 'heartbeat', label: 'Pulse' },
 ] as const
 
 export type FxId = (typeof FX_LIST)[number]['id']

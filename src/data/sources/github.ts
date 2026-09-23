@@ -134,6 +134,6 @@ export function githubToCandidate(raw: GithubRaw): Candidate | null {
     skills,
     source: 'github',
     stats: { repos: user.public_repos, followers: user.followers },
-    links: blog ? [{ label: 'Сайт', url: blog }] : undefined,
+    links: blog ? [{ label: 'Website', url: blog }] : undefined,
   }
 }

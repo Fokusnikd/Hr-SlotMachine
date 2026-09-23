@@ -8,7 +8,7 @@ import { Modal } from './common'
 import type { SkillId } from '../game/types'
 
 const PRESETS: { label: string; filter: string }[] = [
-  { label: 'Все', filter: '' },
+  { label: 'All', filter: '' },
   { label: 'Frontend', filter: 'react, typescript' },
   { label: 'Node.js', filter: 'node' },
   { label: 'Python', filter: 'python' },
@@ -21,7 +21,7 @@ const PRESETS: { label: string; filter: string }[] = [
 ]
 
 const SOURCES: { id: SourceFilter; label: string }[] = [
-  { id: 'all', label: 'Все' },
+  { id: 'all', label: 'All' },
   { id: 'jsonresume', label: 'JSON Resume' },
   { id: 'github', label: 'GitHub' },
 ]
@@ -116,17 +116,17 @@ export function Settings({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal onClose={onClose} className="settings">
-      <h2>Настройки</h2>
+      <h2>Settings</h2>
 
       {db.status === 'demo' && (
         <div className="note" style={{ marginTop: 0, marginBottom: 18 }}>
-          База кандидатов ещё не собрана — игра работает на демо-данных. Соберите её командой <code>npm run db:update</code>.
+          The candidate database hasn't been built yet — the game is running on demo data. Build it with <code>npm run db:update</code>.
         </div>
       )}
 
       {db.status === 'ready' && (
         <div className="field">
-          <span className="field__label">Источник</span>
+          <span className="field__label">Source</span>
           <div className="segmented">
             {SOURCES.map((s) => (
               <button key={s.id} className={source === s.id ? 'active' : ''} onClick={() => setSource(s.id)} disabled={s.id !== 'all' && !db.counts[s.id]}>
@@ -138,8 +138,8 @@ export function Settings({ onClose }: { onClose: () => void }) {
       )}
 
       <div className="field">
-        <span className="field__label">Кого ищем</span>
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="например: react, docker, berlin" spellCheck={false} />
+        <span className="field__label">Who we're looking for</span>
+        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="e.g.: react, docker, berlin" spellCheck={false} />
         <div className="presets">
           {PRESETS.map((p) => (
             <button key={p.label} className={`chip chip--btn ${filter === p.filter ? 'chip--matched' : ''}`} onClick={() => choosePreset(p.filter)}>
@@ -148,17 +148,17 @@ export function Settings({ onClose }: { onClose: () => void }) {
           ))}
         </div>
         <span className="hint">
-          Через запятую, все условия сразу. Навыки распознаются по словарю
-          {terms.some((t) => t.skill) && <> ({terms.filter((t) => t.skill).map((t) => getSkill(t.skill!).label).join(', ')})</>}, остальное ищется в
-          должности, городе и описании.
+          Comma-separated, all conditions apply together. Skills are recognized from a dictionary
+          {terms.some((t) => t.skill) && <> ({terms.filter((t) => t.skill).map((t) => getSkill(t.skill!).label).join(', ')})</>}, everything else is
+          searched for in the title, city, and description.
         </span>
       </div>
 
       <div className="field">
         <span className="field__label">
-          Нужные навыки{' '}
+          Skills needed{' '}
           <span className="muted small">
-            выбрано {skills.length} из {MAX_SKILLS}
+            {skills.length} of {MAX_SKILLS} selected
           </span>
         </span>
         {role.length ? (
@@ -175,7 +175,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
                   onClick={() => toggle(s.id)}
                   disabled={locked}
                   aria-pressed={on}
-                  title={`${s.count} ${plural(s.count, 'кандидат', 'кандидата', 'кандидатов')} с этим навыком · анимация: ${fxLabel(fxMap[s.id])}`}
+                  title={`${s.count} ${plural(s.count, 'candidate', 'candidates', 'candidates')} with this skill · animation: ${fxLabel(fxMap[s.id])}`}
                 >
                   {on && <span className="chip__check">✓</span>}
                   {sk.label} <span className="chip__count">{s.count}</span>
@@ -184,22 +184,22 @@ export function Settings({ onClose }: { onClose: () => void }) {
             })}
           </div>
         ) : (
-          <span className="hint">По этому фильтру нет кандидатов — навыки не из чего выбрать.</span>
+          <span className="hint">No candidates match this filter — there are no skills to choose from.</span>
         )}
         <div className="lines-info">
           <LinesPreview count={lineCount} />
           <div className="lines-info__text">
             <div className="line-stepper">
-              <span>Линий</span>
-              <button className="icon-btn icon-btn--sm" onClick={() => setLineWish(lineCount - 1)} disabled={lineCount <= minLines} aria-label="Меньше линий">
+              <span>Lines</span>
+              <button className="icon-btn icon-btn--sm" onClick={() => setLineWish(lineCount - 1)} disabled={lineCount <= minLines} aria-label="Fewer lines">
                 −
               </button>
               <b className="line-stepper__value">{lineCount}</b>
-              <button className="icon-btn icon-btn--sm" onClick={() => setLineWish(lineCount + 1)} disabled={lineCount >= MAX_LINES} aria-label="Больше линий">
+              <button className="icon-btn icon-btn--sm" onClick={() => setLineWish(lineCount + 1)} disabled={lineCount >= MAX_LINES} aria-label="More lines">
                 +
               </button>
               <span className="muted small">
-                мин. {minLines} · спин {cost} ◎
+                min. {minLines} · spin {cost} ◎
               </span>
             </div>
             <input
@@ -209,47 +209,47 @@ export function Settings({ onClose }: { onClose: () => void }) {
               max={MAX_LINES}
               value={lineCount}
               onChange={(e) => setLineWish(Number(e.target.value))}
-              aria-label="Число линий"
+              aria-label="Number of lines"
             />
             <span className="small">
               {sameSkills ? (
                 <>
-                  Выплата за человека: ×3 = +{payoutFor(3, scaleForLines(payTable, lineCount))} ◎, ×4 = +{payoutFor(4, scaleForLines(payTable, lineCount))} ◎, ×5 = +{payoutFor(5, scaleForLines(payTable, lineCount))} ◎
+                  Payout per person: ×3 = +{payoutFor(3, scaleForLines(payTable, lineCount))} ◎, ×4 = +{payoutFor(4, scaleForLines(payTable, lineCount))} ◎, ×5 = +{payoutFor(5, scaleForLines(payTable, lineCount))} ◎
                 </>
               ) : (
-                'Выплаты пересчитаются под новые навыки после «Применить»'
+                'Payouts recalculate for the new skills after "Apply"'
               )}
             </span>
             <span className="hint">
-              Барабаны честные: каждая клетка выпадает случайно, частые навыки (например, React) выпадают чаще редких. Линии включаются по
-              порядку, ставка {LINE_BET} ◎ за линию. Навыки складываются у линий, которые пересекаются в клетке с совпавшим навыком; повторы
-              считаются один раз. За спин может выпасть несколько человек: после каждого совпадения его линии заняты, следующее ищется на
-              остальных — поэтому каждая добавленная линия даёт шанс на ещё одного человека. Выплата подбирается под навыки: редкие платят больше.
+              The reels are fair: every cell lands at random, and common skills (like React) come up more often than rare ones. Lines
+              activate in order, at a cost of {LINE_BET} ◎ per line. Skills add up on lines that cross at a cell with a matched skill; repeats
+              count once. Several people can appear per spin: once a match is made its lines are used up, and the next match is searched for on
+              the rest — so every extra line is a chance at another person. Payouts are tuned to the skills: rare ones pay more.
             </span>
           </div>
         </div>
         <span className={`match-count ${matches < 10 ? 'match-count--low' : ''}`}>
-          Подходит: <b>{matches.toLocaleString('ru-RU')}</b> <span className="muted small">(есть 3+ выбранных навыка)</span>{' '}
-          {matches < 10 && '— маловато для игры, ослабьте фильтр или выберите другие навыки'}
+          Matches: <b>{matches.toLocaleString('en-US')}</b> <span className="muted small">(has 3+ selected skills)</span>{' '}
+          {matches < 10 && '— too few to play, loosen the filter or pick different skills'}
         </span>
       </div>
 
       <label className="field field--row">
         <input type="checkbox" checked={settings.sound} onChange={(e) => update({ sound: e.target.checked })} />
-        <span>Звук</span>
+        <span>Sound</span>
       </label>
       <label className="field field--row">
         <input type="checkbox" checked={settings.fx} onChange={(e) => update({ fx: e.target.checked })} />
-        <span>Анимации слотов при выигрыше</span>
+        <span>Slot animations on win</span>
       </label>
 
       <div className="settings__actions">
         <button className="btn btn--ghost btn--sm" onClick={reset}>
-          Сбросить прогресс
+          Reset progress
         </button>
         <span className="spacer" />
         <button className="btn btn--primary" onClick={apply} disabled={matches === 0}>
-          Применить
+          Apply
         </button>
       </div>
     </Modal>

@@ -34,7 +34,7 @@ export function Modal({ children, onClose, className = '' }: { children: React.R
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
       <div className={`modal ${className}`} role="dialog" aria-modal="true">
         {onClose && (
-          <button className="icon-btn modal__close" onClick={onClose} aria-label="Закрыть">
+          <button className="icon-btn modal__close" onClick={onClose} aria-label="Close">
             ✕
           </button>
         )}

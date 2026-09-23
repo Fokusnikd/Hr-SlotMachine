@@ -119,8 +119,8 @@ export function jsonResumeToCandidate(raw: JsonResumeRaw): Candidate | null {
   if (!b.name || skills.length < 3) return null
   const loc = b.location
   const links = [
-    ...(b.profiles ?? []).map((p) => ({ label: p.network || 'Профиль', url: safeUrl(p.url) })),
-    { label: 'Сайт', url: safeUrl(b.url) },
+    ...(b.profiles ?? []).map((p) => ({ label: p.network || 'Profile', url: safeUrl(p.url) })),
+    { label: 'Website', url: safeUrl(b.url) },
   ].filter((l): l is { label: string; url: string } => !!l.url)
 
   return {

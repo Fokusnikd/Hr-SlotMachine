@@ -193,7 +193,7 @@ function OpenButton({ x }: { x: number }) {
   const group = useRef<THREE.Group>(null!)
   const pressed = useRef(0)
   const hover = useHoverCursor()
-  const label = useMemo(() => wideLabelTexture('ОТКРЫТЬ'), [])
+  const label = useMemo(() => wideLabelTexture('OPEN'), [])
   const col = useMemo(() => new THREE.Color(), [])
   useFrame(({ clock }, dt) => {
     const { phase, winOpen } = useGame.getState()
@@ -610,7 +610,7 @@ function Key({
   )
 }
 
-const lineWord = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? 'ЛИНИЯ' : [2, 3, 4].includes(n % 10) && ![12, 13, 14].includes(n % 100) ? 'ЛИНИИ' : 'ЛИНИЙ')
+const lineWord = (n: number) => (n === 1 ? 'LINE' : 'LINES')
 
 /** Раскладка панели: широкий экран — один ряд, портрет — два ряда крупных клавиш. */
 function deckLayout(compact: boolean) {
@@ -665,8 +665,8 @@ function ControlDeck() {
           position={[L.auto.x, 0, L.auto.z]}
           w={L.auto.w}
           d={L.auto.d}
-          title="АВТО"
-          sub="ЗАПУСК"
+          title="AUTO"
+          sub="SPIN"
           onColor="#5cff9a"
           state={() => (st().auto ? 'on' : 'off')}
           onPress={toggleAuto}

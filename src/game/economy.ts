@@ -62,9 +62,9 @@ export function scaleForLines(table: Record<number, number>, lines: number): num
 }
 
 const RARITY_NAME: Record<Rarity, string> = {
-  common: "Совпадение",
-  rare: "Редкий",
-  legendary: "ЛЕГЕНДА",
+  common: "Match",
+  rare: "Rare",
+  legendary: "LEGENDARY",
 };
 
 export const rarityLabel = (rarity: Rarity, matched: number) =>

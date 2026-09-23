@@ -7,23 +7,24 @@ export function PrivacyLink() {
   return (
     <>
       <button className="privacy-link" onClick={() => setOpen(true)}>
-        Данные и приватность
+        Data & Privacy
       </button>
       {open && (
         <Modal onClose={() => setOpen(false)} className="privacy">
-          <h2>Данные и приватность</h2>
+          <h2>Data & Privacy</h2>
           <p>
-            Профили в этой игре взяты из публичных резюме{' '}
+            Profiles in this game are pulled from public resumes on{' '}
             <a href="https://jsonresume.org/registry/" target="_blank" rel="noreferrer">
               JSON Resume Registry
             </a>{' '}
-            — их авторы сами выложили эти данные в открытом виде. Профили остаются собственностью авторов; у каждой
-            карточки кандидата есть ссылка на исходное резюме.
+            — their authors published this data openly themselves. Profiles remain the property of their authors;
+            every candidate card links back to the original resume.
           </p>
-          <p>Мы не продаём и не передаём персональные данные кандидатов третьим лицам.</p>
+          <p>We don't sell or share candidates' personal data with third parties.</p>
           <p>
-            База не хранится вечно: она пересобирается по расписанию из текущего состояния реестра, а сырые снимки,
-            которые давно не обновлялись или пропали из источника, автоматически удаляются из кэша.
+            The database isn't kept forever: it's rebuilt on a schedule from the registry's current state, and raw
+            snapshots that haven't been updated in a long time or have vanished from the source are automatically
+            purged from the cache.
           </p>
         </Modal>
       )}

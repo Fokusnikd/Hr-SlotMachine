@@ -122,7 +122,7 @@ export function signTexture(): THREE.CanvasTexture {
   ctx.shadowBlur = 18
   ctx.font = `700 38px ${FONT}`
   ctx.fillStyle = '#c9fbff'
-  ctx.fillText('С Л О Т М А Ш И Н А   Т А Л А Н Т О В', W / 2, H - 42)
+  ctx.fillText('T A L E N T   S L O T   M A C H I N E', W / 2, H - 42)
 
   const tex = finish(canvas)
   cache.set('__sign', tex)
@@ -145,10 +145,10 @@ export function panelTexture(): THREE.CanvasTexture {
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
   ctx.fillStyle = '#ffcf4a'
-  ctx.fillText('3+ навыка в комбо = кандидат', 40, 52)
+  ctx.fillText('3+ skills in combo = candidate', 40, 52)
   ctx.fillStyle = '#9fe8ff'
   ctx.font = `600 34px ${FONT}`
-  ctx.fillText('пересекающиеся линии складываются', 40, 112)
+  ctx.fillText('crossing lines stack', 40, 112)
   const tex = finish(canvas)
   cache.set('__panel', tex)
   return tex
@@ -188,8 +188,8 @@ export function makeLinesDisplay(W = 552, H = 120) {
       ctx.fillText(value, cx, H * 0.66)
       ctx.shadowBlur = 0
     }
-    cell(W / 4, auto ? 'ЛИНИИ · АВТО' : 'ЛИНИИ', String(lines), auto ? '#5cff9a' : '#ffd6f7')
-    cell((W * 3) / 4, 'СТАВКА', `${cost} ◎`, '#ffd84a')
+    cell(W / 4, auto ? 'LINES · AUTO' : 'LINES', String(lines), auto ? '#5cff9a' : '#ffd6f7')
+    cell((W * 3) / 4, 'BET', `${cost} ◎`, '#ffd84a')
     tex.needsUpdate = true
   }
   return { tex, draw }
@@ -502,11 +502,11 @@ export function scatterTexture(): THREE.CanvasTexture {
   ctx.textBaseline = 'middle'
   ctx.font = `900 84px ${FONT}`
   ctx.fillStyle = 'rgba(90,40,0,0.45)'
-  ctx.fillText('МАТЧ', W / 2 + 3, 176)
+  ctx.fillText('MATCH', W / 2 + 3, 176)
   ctx.fillStyle = '#fffbe6'
   ctx.shadowColor = '#7a4300'
   ctx.shadowBlur = 6
-  ctx.fillText('МАТЧ', W / 2, 172)
+  ctx.fillText('MATCH', W / 2, 172)
   ctx.shadowBlur = 0
   // Звёздочка-искра
   const star = (cx: number, cy: number, r: number) => {
@@ -535,12 +535,12 @@ export function folderFrontTexture(n: number): THREE.CanvasTexture {
     ctx.textBaseline = 'middle'
     ctx.font = `900 40px ${FONT}`
     ctx.fillStyle = 'rgba(90,40,0,0.75)'
-    ctx.fillText('РЕЗЮМЕ', 200, 120)
+    ctx.fillText('RESUME', 200, 120)
     ctx.font = `900 64px ${FONT}`
     ctx.fillStyle = '#fffbe6'
     ctx.shadowColor = '#7a4300'
     ctx.shadowBlur = 6
-    ctx.fillText(`№${n}`, 200, 190)
+    ctx.fillText(`#${n}`, 200, 190)
   })
 }
 
@@ -565,11 +565,11 @@ export function folderBackTexture(kind: 'hire' | 'reject' | 'empty' | 'shield'):
       ctx.textBaseline = 'middle'
       ctx.font = `800 46px ${FONT}`
       ctx.fillStyle = '#8a8274'
-      ctx.fillText('пусто', 200, 150)
+      ctx.fillText('empty', 200, 150)
       return
     }
     const color = kind === 'hire' ? '#12a64a' : kind === 'reject' ? '#e0243a' : '#2a8cf0'
-    const text = kind === 'hire' ? 'МАТЧ' : kind === 'reject' ? 'МИМО' : 'ЩИТ'
+    const text = kind === 'hire' ? 'MATCH' : kind === 'reject' ? 'MISS' : 'SHIELD'
     ctx.save()
     ctx.translate(200, 150)
     ctx.rotate(-0.2)
@@ -593,7 +593,7 @@ export function folderBackTexture(kind: 'hire' | 'reject' | 'empty' | 'shield'):
       ctx.font = `800 30px ${FONT}`
       ctx.textAlign = 'center'
       ctx.fillStyle = '#e0243a'
-      ctx.fillText('мимо', 0, 0)
+      ctx.fillText('miss', 0, 0)
       ctx.fillRect(-48, -2, 96, 5)
       ctx.restore()
     }
@@ -630,8 +630,8 @@ export function acceptedTexture(): THREE.CanvasTexture {
     ctx.textBaseline = 'middle'
     let px = 92
     ctx.font = `900 ${px}px ${FONT}`
-    while (ctx.measureText('НАЙДЕНО').width > 330 && px > 40) ctx.font = `900 ${(px -= 2)}px ${FONT}`
-    ctx.fillText('НАЙДЕНО', 0, 6)
+    while (ctx.measureText('FOUND').width > 330 && px > 40) ctx.font = `900 ${(px -= 2)}px ${FONT}`
+    ctx.fillText('FOUND', 0, 6)
     ctx.restore()
   })
 }
