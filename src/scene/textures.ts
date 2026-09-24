@@ -264,7 +264,7 @@ export function makeMessageDisplay(W = 1024, H = 128) {
   canvas.height = H
   const ctx = canvas.getContext('2d')!
   const tex = finish(canvas)
-  const draw = (text: string, tone: 'idle' | 'spinning' | 'win' | 'bonus') => {
+  const draw = (text: string, tone: 'idle' | 'spinning' | 'win' | 'bonus' | 'upgrade') => {
     ctx.clearRect(0, 0, W, H)
     ctx.fillStyle = '#05020b'
     roundRect(ctx, 3, 3, W - 6, H - 6, 16)
@@ -274,7 +274,7 @@ export function makeMessageDisplay(W = 1024, H = 128) {
     ctx.stroke()
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    const color = tone === 'win' || tone === 'bonus' ? '#ffd84a' : tone === 'spinning' ? '#9fe8ff' : '#fff2c4'
+    const color = tone === 'win' || tone === 'bonus' || tone === 'upgrade' ? '#ffd84a' : tone === 'spinning' ? '#9fe8ff' : '#fff2c4'
     // Подбираем размер: одна строка, если влезает, иначе две.
     const maxW = W - 60
     let size = Math.round(H * 0.42)
@@ -633,5 +633,80 @@ export function acceptedTexture(): THREE.CanvasTexture {
     while (ctx.measureText('FOUND').width > 330 && px > 40) ctx.font = `900 ${(px -= 2)}px ${FONT}`
     ctx.fillText('FOUND', 0, 6)
     ctx.restore()
+  })
+}
+
+
+/** Короткие нейтральные флейворы на закрытой папке оффера — decor only, к реальному уровню не привязаны. */
+const OFFER_FLAVORS = [
+  'Смотрит уверенно',
+  'Не подаёт виду',
+  'Слегка нервничает',
+  'Держит паузу',
+  'Кажется, сговорчивый',
+  'Считает в уме',
+  'Морщится',
+  'Спокоен как удав',
+]
+
+/** Изумрудная папка (переговоры об оффере) — свой цвет, отдельный от золота бонуса. */
+function offerFolder(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
+  const g = ctx.createLinearGradient(0, y, 0, y + h)
+  g.addColorStop(0, '#8affc9')
+  g.addColorStop(0.35, '#28c47e')
+  g.addColorStop(0.7, '#0f8f5c')
+  g.addColorStop(1, '#0a5e3d')
+  folderPath(ctx, x, y, w, h)
+  ctx.fillStyle = g
+  ctx.fill()
+  ctx.lineWidth = 7
+  ctx.strokeStyle = '#04331f'
+  ctx.stroke()
+  ctx.save()
+  folderPath(ctx, x, y, w, h)
+  ctx.clip()
+  ctx.fillStyle = 'rgba(255,255,255,0.22)'
+  ctx.fillRect(x, y + h * 0.26, w, h * 0.06)
+  ctx.restore()
+}
+
+/** Закрытый оффер миниигры «Переговоры об оффере» — одинаковая папка, разный флейвор-текст. */
+export function offerBackTexture(flavorIndex: number): THREE.CanvasTexture {
+  const idx = ((flavorIndex % OFFER_FLAVORS.length) + OFFER_FLAVORS.length) % OFFER_FLAVORS.length
+  return fxCanvas(`__offerback${idx}`, 400, 280, (ctx) => {
+    offerFolder(ctx, 14, 14, 372, 252)
+    // "?" в центре — предложение ещё не вскрыто.
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `900 88px ${FONT}`
+    ctx.fillStyle = 'rgba(0,0,0,0.3)'
+    ctx.fillText('?', 202, 138)
+    ctx.fillStyle = '#eafff3'
+    ctx.shadowColor = '#0a5e3d'
+    ctx.shadowBlur = 10
+    ctx.fillText('?', 200, 136)
+    ctx.shadowBlur = 0
+    // Флейвор — необязательный намёк, ни на что не влияет.
+    ctx.font = `700 24px ${FONT}`
+    ctx.fillStyle = 'rgba(234,255,243,0.9)'
+    ctx.fillText(OFFER_FLAVORS[idx], 200, 226)
+  })
+}
+
+/** Вскрытый оффер (открытый или только что перевёрнутый закрытый) — крупная сумма, без явного процента шанса. */
+export function offerFrontTexture(amount: number): THREE.CanvasTexture {
+  return fxCanvas(`__offerfront${amount}`, 400, 280, (ctx) => {
+    offerFolder(ctx, 14, 14, 372, 252)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `900 30px ${FONT}`
+    ctx.fillStyle = 'rgba(4,51,31,0.7)'
+    ctx.fillText('OFFER', 200, 66)
+    ctx.font = `900 60px ${FONT}`
+    ctx.fillStyle = '#04331f'
+    ctx.fillText(`$${amount.toLocaleString('en-US')}`, 200, 148)
+    ctx.font = `800 24px ${FONT}`
+    ctx.fillStyle = 'rgba(4,51,31,0.75)'
+    ctx.fillText('per year', 200, 200)
   })
 }

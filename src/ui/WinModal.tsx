@@ -1,4 +1,4 @@
-import { useGame } from '../game/store'
+import { upgradeCandidates, useGame } from '../game/store'
 import { payoutFor, rarityLabel } from '../game/economy'
 import { Avatar, Modal, SkillChip } from './common'
 import type { CandidateSource } from '../game/types'
@@ -20,6 +20,11 @@ export function WinModal() {
   const closeWin = useGame((s) => s.closeWin)
   const winIndex = useGame((s) => s.winIndex)
   const winScale = useGame((s) => s.winScale)
+  const targets = useGame((s) => s.targets)
+  const upgradeApplied = useGame((s) => s.upgradeApplied)
+  const startUpgrade = useGame((s) => s.startUpgrade)
+  const filtered = useGame((s) => s.filtered)
+  const excluded = useGame((s) => s.excluded)
   const visible = winOpen && phase === 'win'
 
   const win = result?.wins[winIndex]
@@ -28,6 +33,11 @@ export function WinModal() {
   const total = result!.wins.length
   const matched = new Set(win.matched)
   const ordered = [...new Set(c.skills)].sort((a, b) => Number(matched.has(b)) - Number(matched.has(a)))
+
+  // Апгрейдится карточка целиком, не сам кандидат: кнопка есть, пока в пуле есть ещё не выпадавший
+  // кандидат с более высоким матчем. Нет такого — это максимум, вместо кнопки надпись.
+  const isMax = upgradeCandidates(filtered, targets, new Set(excluded), c.id, win.matched.length).length === 0
+  const canUpgrade = !upgradeApplied[winIndex] && !isMax
 
   return (
     <Modal className={`win win--${win.rarity}`} onClose={closeWin}>
@@ -68,6 +78,12 @@ export function WinModal() {
       )}
       {c.source === 'mock' && <div className="note">Demo candidate: the link opens a search for similar profiles on GitHub.</div>}
       <div className="win__actions">
+        {isMax && <span className="win__max">★ Maximum</span>}
+        {canUpgrade && (
+          <button className="btn btn--upgrade" onClick={startUpgrade} title="One try per candidate — pick an offer higher than their ask to improve the match, but a lower offer loses the candidate">
+            💼 Counter with a better offer
+          </button>
+        )}
         <a className="btn btn--primary" href={c.url} target="_blank" rel="noreferrer" onClick={keep}>
           {c.source === 'jsonresume' ? 'Open resume ↗' : 'Open profile ↗'}
         </a>

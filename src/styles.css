@@ -236,6 +236,15 @@ button {
 .btn--gold:hover {
   background: linear-gradient(180deg, #ffe08a, #e6a820);
 }
+.btn--upgrade {
+  background: linear-gradient(180deg, #b98bff, #6a2fd6);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 6px 20px rgba(138, 79, 224, 0.35);
+}
+.btn--upgrade:hover {
+  background: linear-gradient(180deg, #c8a2ff, #7a3fe6);
+}
 .btn--spin {
   min-width: 220px;
   padding: 14px 34px;
@@ -834,4 +843,15 @@ code {
 }
 .modal.privacy a {
   color: inherit;
+}
+.win__max {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: #ffd84a;
+  border: 1px solid rgba(255, 216, 74, 0.45);
+  background: rgba(255, 216, 74, 0.08);
 }

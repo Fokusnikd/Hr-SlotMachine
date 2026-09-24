@@ -10,8 +10,9 @@ import { makeMockCandidates } from '../data/mockCandidates'
 import { loadDatabase } from '../data/db'
 import { bestCandidate, CONSOLATION_SPINS, HIRES_TO_WIN, newBonus, openFolder as openBonusFolder, REJECTS_TO_LOSE, type BonusGame } from './bonus'
 import { rarityFor, SCATTER } from './outcome'
+import { newUpgrade, pickOffer as pickUpgradeOffer, type UpgradeGame } from './upgrade'
 
-export type Phase = 'idle' | 'spinning' | 'win' | 'bonus'
+export type Phase = 'idle' | 'spinning' | 'win' | 'bonus' | 'upgrade'
 export type SourceFilter = 'all' | Exclude<CandidateSource, 'mock'>
 
 export interface Settings {
@@ -95,6 +96,14 @@ interface State {
   /** Приз выигранной миниигры — покажется как обычный выигрыш после анимации. */
   bonusPrize: SpinResult | null
 
+  /** Миниигра «Переговоры об оффере» (Hi-Lo, фаза upgrade) — заменить текущий выигрыш на кандидата
+   *  со следующим уровнем матча; сам кандидат не меняется, апгрейдится карточка целиком. */
+  upgrade: UpgradeGame | null
+  /** Когда (performance.now) началась миниигра улучшения — для анимации появления. */
+  upgradeAt: number
+  /** Какие выигрыши текущего спина уже прошли через миниигру улучшения (winIndex → true), не больше раза на кандидата. */
+  upgradeApplied: Record<number, boolean>
+
   excluded: string[]
   shortlist: Candidate[]
   stats: { spins: number; wins: number; exchanged: number }
@@ -121,6 +130,13 @@ interface State {
   openFolder: (index: number) => void
   /** Закончить миниигру (после показа результата): приз → карточка кандидата, проигрыш → к спинам. */
   finishBonus: () => void
+  /** Запустить миниигру «Переговоры об оффере» для текущего выигрыша (одна попытка на кандидата). */
+  startUpgrade: () => void
+  /** Вскрыть закрытый оффер (индекс) в миниигре улучшения. */
+  pickOffer: (index: number) => void
+  /** Закончить миниигру улучшения: победа — карточка заменена на кандидата со следующим уровнем
+   *  матча, поражение — кандидат потерян. */
+  finishUpgrade: () => void
 }
 
 const initialSettings: Settings = {
@@ -157,6 +173,23 @@ export const resolveLines = (lines: number | undefined, skillCount: number) =>
 
 /** Сколько разных навыков из набора есть у кандидата. */
 export const countTargets = (c: Candidate, targets: ReadonlySet<SkillId>) => new Set(c.skills.filter((s) => targets.has(s))).size
+
+/** Кандидаты пула для миниигры «Переговоры об оффере»: ещё не выпадавшие, не текущий кандидат,
+ *  со СЛЕДУЮЩИМ уровнем матча — наименьшим из тех, что выше `current` (обычно current + 1).
+ *  Пусто — выше этого грейда в пуле никого нет (максимум). Апгрейдится карточка, а не кандидат. */
+export function upgradeCandidates(filtered: Candidate[], targets: SkillId[], excluded: ReadonlySet<string>, currentId: string, current: number): Candidate[] {
+  const t = new Set(targets)
+  let next = Infinity
+  let list: Candidate[] = []
+  for (const c of filtered) {
+    if (c.id === currentId || excluded.has(c.id)) continue
+    const n = countTargets(c, t)
+    if (n <= current || n > next) continue
+    if (n < next) ((next = n), (list = []))
+    list.push(c)
+  }
+  return list
+}
 
 /** Кандидаты позиции, у которых есть хотя бы 3 выбранных навыка — только они могут выпасть. */
 export function playable(all: Candidate[], settings: Pick<Settings, 'source' | 'filter'>, skills: SkillId[]) {
@@ -280,6 +313,7 @@ export const useGame = create<State>((set, get) => {
   }
 
   let finishTimer: ReturnType<typeof setTimeout> | undefined
+  let finishUpgradeTimer: ReturnType<typeof setTimeout> | undefined
 
   /** Запуск миниигры: барабаны уезжают, в окне — 12 папок. */
   const startBonus = (scatters: number) => {
@@ -345,6 +379,9 @@ export const useGame = create<State>((set, get) => {
     pendingBonus: 0,
     bonusConsolation: 0,
     bonusPrize: null,
+    upgrade: null,
+    upgradeAt: 0,
+    upgradeApplied: {},
 
     excluded: load<string[]>('excluded', []),
     shortlist: load<Candidate[]>('shortlist', []),
@@ -382,6 +419,10 @@ export const useGame = create<State>((set, get) => {
       // Во время миниигры ЗАПУСК/пробел только закрывают показанный результат.
       if (s.phase === 'bonus') {
         if (s.bonus && s.bonus.status !== 'play') get().finishBonus()
+        return false
+      }
+      if (s.phase === 'upgrade') {
+        if (s.upgrade && s.upgrade.status !== 'play') get().finishUpgrade()
         return false
       }
       // Неразобранные кандидаты при новом спине автоматически обмениваются на кредиты.
@@ -429,6 +470,7 @@ export const useGame = create<State>((set, get) => {
         winOpen: false,
         pendingBonus: 0,
         bonus: null,
+        upgradeApplied: {},
         message: exchangedNote + (s.auto ? 'Auto-spin: spinning…' : 'Spinning…'),
         stats: { ...s.stats, spins: s.stats.spins + 1 },
       })
@@ -539,7 +581,7 @@ export const useGame = create<State>((set, get) => {
 
     setLines: (count) => {
       const s = get()
-      if (s.phase === 'spinning' || s.phase === 'bonus') return
+      if (s.phase === 'spinning' || s.phase === 'bonus' || s.phase === 'upgrade') return
       const min = minLinesFor(s.targets.length)
       if (count < min) {
         set({ message: `${s.targets.length} ${plural(s.targets.length, 'skill', 'skills', 'skills')} need at least ${min} ${plural(min, 'line', 'lines', 'lines')}` })
@@ -569,7 +611,7 @@ export const useGame = create<State>((set, get) => {
 
     changeLines: (delta) => {
       const s = get()
-      if (s.phase === 'spinning' || s.phase === 'bonus') return
+      if (s.phase === 'spinning' || s.phase === 'bonus' || s.phase === 'upgrade') return
       const min = minLinesFor(s.targets.length)
       const next = Math.min(MAX_LINES, Math.max(min, s.lines.length + delta))
       if (next === s.lines.length) {
@@ -649,10 +691,96 @@ export const useGame = create<State>((set, get) => {
           winOpen: true,
           bonus: null,
           bonusPrize: null,
+          upgradeApplied: {},
           stats: { ...s.stats, wins: s.stats.wins + 1 },
           message: `Golden Folder: ${w.candidate.name} ×${w.matched.length}! SPIN — exchange for +${payoutFor(w.matched.length, s.winScale)} ◎`,
         })
       } else set({ phase: 'idle', bonus: null, bonusPrize: null, message: 'Bonus over. Keep spinning!' })
+      persist()
+    },
+
+    startUpgrade: () => {
+      const s = get()
+      if (s.phase !== 'win') return
+      const w = currentWin()
+      if (!w) return
+      // Апгрейдится КАРТОЧКА, а не сам кандидат: при победе текущий кандидат целиком заменяется
+      // на другого, честно подобранного заранее из пула со следующим уровнем матча.
+      if (s.upgradeApplied[s.winIndex]) return
+      const pool = upgradeCandidates(s.filtered, s.targets, new Set(s.excluded), w.candidate.id, w.matched.length)
+      if (!pool.length) return
+      const nextCandidate = pool[Math.floor(Math.random() * pool.length)]
+      set({
+        phase: 'upgrade',
+        auto: false,
+        winOpen: false,
+        upgrade: newUpgrade(w.candidate.id, nextCandidate, w.matched.length),
+        upgradeAt: performance.now(),
+        message: `Counter-offer: pick one closed offer. Higher than their ask — a stronger match steps in. Same — nothing changes. Lower — they walk.`,
+      })
+    },
+
+    pickOffer: (index) => {
+      const s = get()
+      if (s.phase !== 'upgrade' || !s.upgrade) return
+      if (s.upgrade.status !== 'play') return get().finishUpgrade()
+      const g = pickUpgradeOffer(s.upgrade, index)
+      if (g === s.upgrade) return
+      const note =
+        g.status === 'won'
+          ? `Higher offer! Deal — a stronger match steps in.`
+          : g.status === 'pushed'
+            ? `Same offer — nothing changes.`
+            : `Lower offer. No deal — the candidate walks away.`
+      set({ upgrade: g, message: note })
+      clearTimeout(finishUpgradeTimer)
+      finishUpgradeTimer = setTimeout(() => {
+        if (get().phase === 'upgrade' && get().upgrade === g) get().finishUpgrade()
+      }, 1800)
+    },
+
+    finishUpgrade: () => {
+      const s = get()
+      if (s.phase !== 'upgrade' || !s.upgrade || s.upgrade.status === 'play') return
+      clearTimeout(finishUpgradeTimer)
+      const g = s.upgrade
+      const w = s.result?.wins[s.winIndex]
+      if (g.status === 'won' && s.result && w) {
+        // Победа заменяет карточку целиком на честно выбранного заранее nextCandidate — исходный
+        // кандидат не трогается, просто больше не показывается (считается «обменянным»).
+        const targetSet = new Set(s.targets)
+        const nextCandidate = g.nextCandidate
+        const matched = [...new Set(nextCandidate.skills.filter((sk) => targetSet.has(sk)))]
+        const rarity = rarityFor(matched.length) ?? w.rarity
+        const wins = s.result.wins.map((ww, i) => (i === s.winIndex ? { ...w, candidate: nextCandidate, matched, rarity } : ww))
+        markUsed(w.candidate)
+        set({
+          result: { ...s.result, wins },
+          upgradeApplied: { ...s.upgradeApplied, [s.winIndex]: true },
+          phase: 'win',
+          winOpen: true,
+          upgrade: null,
+          message: `Deal! Stronger match found — ${nextCandidate.name} ×${matched.length}.`,
+        })
+      } else if (g.status === 'pushed') {
+        // Пуш: попытка сгорает, но кандидат остаётся при своём — карточка просто открывается заново.
+        set({
+          upgrade: null,
+          upgradeApplied: { ...s.upgradeApplied, [s.winIndex]: true },
+          phase: 'win',
+          winOpen: true,
+          message: w ? `Push — ${w.candidate.name} stays at the same match.` : 'Push — nothing changes.',
+        })
+      } else {
+        set({ upgrade: null, upgradeApplied: { ...s.upgradeApplied, [s.winIndex]: true } })
+        if (w) {
+          // Возвращаемся в фазу 'win' — advance() ожидает её (как после exchange/keep) и либо
+          // покажет следующего кандидата этого спина, либо (через afterWins) уйдёт в 'idle'/бонус.
+          set({ phase: 'win', winOpen: true })
+          markUsed(w.candidate)
+          advance(`${w.candidate.name} walked away from the negotiation — no deal.`)
+        } else set({ phase: 'idle', winOpen: false })
+      }
       persist()
     },
 

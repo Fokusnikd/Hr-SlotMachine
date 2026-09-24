@@ -6,6 +6,7 @@ import { useGame } from '../game/store'
 import { MAX_LINES, minLinesFor, REELS, type Payline } from '../game/outcome'
 import { Reel } from './Reel'
 import { BonusBoard } from './BonusBoard'
+import { UpgradeBoard } from './UpgradeBoard'
 import { Sparks } from './Sparks'
 import { keyLabelTexture, lineTagTexture, wideLabelTexture, makeLinesDisplay, makeMessageDisplay, signTexture } from './textures'
 import { sfx } from '../audio/sfx'
@@ -353,8 +354,9 @@ function Paylines() {
     const t = clock.elapsedTime
     const since = (performance.now() - linesChangedAt) / 1000
     const flash = since < FLASH_S ? Math.min(1, (FLASH_S - since) / 0.5) : 0
-    // Линии выигрыша остаются, пока не нажат следующий запуск (и после открытия/обмена кандидата).
-    const hasWin = phase !== 'spinning' && phase !== 'bonus' && !!result?.winner
+    // Линии выигрыша остаются, пока не нажат следующий запуск (и после открытия/обмена кандидата),
+    // но гаснут на время мини-игр (бонус, переговоры об оффере) — окно должно быть поверх линий.
+    const hasWin = phase !== 'spinning' && phase !== 'bonus' && phase !== 'upgrade' && !!result?.winner
     const win = new Set(hasWin ? result!.winLines : [])
     const h = hovered.current
     const shown = (line: number) => {
@@ -772,6 +774,7 @@ export function SlotMachine() {
         <Reel key={i} index={i} x={reelX(i)} />
       ))}
       <BonusBoard />
+      <UpgradeBoard />
       <Paylines />
       <Sparks />
       <Sign />

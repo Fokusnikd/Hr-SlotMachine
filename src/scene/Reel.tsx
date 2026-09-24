@@ -178,10 +178,12 @@ export function Reel({ index, x }: { index: number; x: number }) {
 
     const t = state.clock.elapsedTime
     // Миниигра: барабаны уезжают вниз с небольшой задержкой слева направо, потом возвращаются.
-    const bonusOn = useGame.getState().phase === 'bonus'
-    const slideTo = bonusOn ? -WIN_H * 1.1 : 0
-    const k = 1 - Math.exp(-dt * (bonusOn ? 5 : 7))
-    if (!bonusOn || performance.now() - useGame.getState().bonusAt > index * 70) slide.current += (slideTo - slide.current) * k
+    const reelState = useGame.getState()
+    const away = reelState.phase === 'bonus' || reelState.phase === 'upgrade'
+    const awayAt = reelState.phase === 'upgrade' ? reelState.upgradeAt : reelState.bonusAt
+    const slideTo = away ? -WIN_H * 1.1 : 0
+    const k = 1 - Math.exp(-dt * (away ? 5 : 7))
+    if (!away || performance.now() - awayAt > index * 70) slide.current += (slideTo - slide.current) * k
     root.current.position.y = slide.current
     root.current.visible = slide.current > -WIN_H * 1.05
 
