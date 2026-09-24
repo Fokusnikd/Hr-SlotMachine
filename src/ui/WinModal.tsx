@@ -35,8 +35,9 @@ export function WinModal() {
   const ordered = [...new Set(c.skills)].sort((a, b) => Number(matched.has(b)) - Number(matched.has(a)))
 
   // Апгрейдится карточка целиком, не сам кандидат: кнопка есть, пока в пуле есть ещё не выпадавший
-  // кандидат с более высоким матчем. Нет такого — это максимум, вместо кнопки надпись.
-  const isMax = upgradeCandidates(filtered, targets, new Set(excluded), c.id, win.matched.length).length === 0
+  // кандидат с более высоким матчем (кроме ждущих в этом же спине). Нет такого — максимум, надпись.
+  const skip = new Set([...excluded, ...result!.wins.map((w) => w.candidate.id)])
+  const isMax = upgradeCandidates(filtered, targets, skip, c.id, win.matched.length).length === 0
   const canUpgrade = !upgradeApplied[winIndex] && !isMax
 
   return (
@@ -80,8 +81,8 @@ export function WinModal() {
       <div className="win__actions">
         {isMax && <span className="win__max">★ Maximum</span>}
         {canUpgrade && (
-          <button className="btn btn--upgrade" onClick={startUpgrade} title="One try per candidate — pick an offer higher than their ask to improve the match, but a lower offer loses the candidate">
-            💼 Counter with a better offer
+          <button className="btn btn--upgrade" onClick={startUpgrade} title="Spin the negotiation wheel: green — a stronger match steps in and you can keep climbing, yellow — free respin, red — the candidate walks and the whole chain is lost">
+            🎡 Negotiation wheel
           </button>
         )}
         <a className="btn btn--primary" href={c.url} target="_blank" rel="noreferrer" onClick={keep}>

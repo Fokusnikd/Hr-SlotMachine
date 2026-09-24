@@ -639,78 +639,212 @@ export function acceptedTexture(): THREE.CanvasTexture {
 }
 
 
-/** Короткие нейтральные флейворы на закрытой папке оффера — decor only, к реальному уровню не привязаны. */
-const OFFER_FLAVORS = [
-  'Смотрит уверенно',
-  'Не подаёт виду',
-  'Слегка нервничает',
-  'Держит паузу',
-  'Кажется, сговорчивый',
-  'Считает в уме',
-  'Морщится',
-  'Спокоен как удав',
-]
+// ---------- Колесо торга (миниигра улучшения) ----------
 
-/** Изумрудная папка (переговоры об оффере) — свой цвет, отдельный от золота бонуса. */
-function offerFolder(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number) {
-  const g = ctx.createLinearGradient(0, y, 0, y + h)
-  g.addColorStop(0, '#8affc9')
-  g.addColorStop(0.35, '#28c47e')
-  g.addColorStop(0.7, '#0f8f5c')
-  g.addColorStop(1, '#0a5e3d')
-  folderPath(ctx, x, y, w, h)
-  ctx.fillStyle = g
+const WHEEL_COLORS: Record<'win' | 'push' | 'lose', [string, string, string]> = {
+  // [внутренний, внешний, альтернативный внешний — чтобы соседние сектора одного цвета различались]
+  win: ['#7dffb8', '#12a862', '#0d8d51'],
+  push: ['#fff1a6', '#e8b416', '#cf9d0b'],
+  lose: ['#ff9aa4', '#d8243a', '#b81a2f'],
+}
+const WHEEL_ICONS = { win: '✔', push: '↻', lose: '✕' }
+
+/**
+ * Лицо колеса: сектора по часовой стрелке от верха (как в upgrade.ts). Не кэшируется —
+ * у каждой ступени своя раскладка; освобождает вызывающий (dispose).
+ */
+export function wheelFaceTexture(sectors: { kind: 'win' | 'push' | 'lose'; start: number; size: number }[]): THREE.CanvasTexture {
+  const S = 1024
+  const c = S / 2
+  const R = S / 2 - 4
+  const canvas = document.createElement('canvas')
+  canvas.width = S
+  canvas.height = S
+  const ctx = canvas.getContext('2d')!
+  const TAU = Math.PI * 2
+  sectors.forEach((sec, i) => {
+    if (sec.size <= 0) return
+    const a0 = -Math.PI / 2 + sec.start * TAU
+    const a1 = a0 + sec.size * TAU
+    const [inner, outer, alt] = WHEEL_COLORS[sec.kind]
+    const g = ctx.createRadialGradient(c, c, R * 0.15, c, c, R)
+    g.addColorStop(0, inner)
+    g.addColorStop(1, i % 2 ? alt : outer)
+    ctx.beginPath()
+    ctx.moveTo(c, c)
+    ctx.arc(c, c, R, a0, a1)
+    ctx.closePath()
+    ctx.fillStyle = g
+    ctx.fill()
+    // Разделитель.
+    ctx.strokeStyle = 'rgba(20,6,30,0.85)'
+    ctx.lineWidth = 5
+    ctx.beginPath()
+    ctx.moveTo(c, c)
+    ctx.lineTo(c + Math.cos(a0) * R, c + Math.sin(a0) * R)
+    ctx.stroke()
+    // Значок по радиусу — только если сектор достаточно широкий.
+    const arcLen = sec.size * TAU * R * 0.74
+    if (arcLen < 26) return
+    const mid = (a0 + a1) / 2
+    const px = Math.min(76, arcLen * 0.8)
+    ctx.save()
+    ctx.translate(c + Math.cos(mid) * R * 0.74, c + Math.sin(mid) * R * 0.74)
+    ctx.rotate(mid + Math.PI / 2)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.font = `900 ${px}px ${FONT}`
+    ctx.fillStyle = 'rgba(20,6,30,0.35)'
+    ctx.fillText(WHEEL_ICONS[sec.kind], 3, 4)
+    ctx.fillStyle = sec.kind === 'push' ? '#3a2600' : '#ffffff'
+    ctx.fillText(WHEEL_ICONS[sec.kind], 0, 0)
+    ctx.restore()
+  })
+  // Внутреннее кольцо под ступицу.
+  ctx.beginPath()
+  ctx.arc(c, c, R * 0.24, 0, TAU)
+  ctx.fillStyle = '#1a0b2a'
   ctx.fill()
-  ctx.lineWidth = 7
-  ctx.strokeStyle = '#04331f'
-  ctx.stroke()
-  ctx.save()
-  folderPath(ctx, x, y, w, h)
-  ctx.clip()
-  ctx.fillStyle = 'rgba(255,255,255,0.22)'
-  ctx.fillRect(x, y + h * 0.26, w, h * 0.06)
-  ctx.restore()
+  return finish(canvas)
 }
 
-/** Закрытый оффер миниигры «Переговоры об оффере» — одинаковая папка, разный флейвор-текст. */
-export function offerBackTexture(flavorIndex: number): THREE.CanvasTexture {
-  const idx = ((flavorIndex % OFFER_FLAVORS.length) + OFFER_FLAVORS.length) % OFFER_FLAVORS.length
-  return fxCanvas(`__offerback${idx}`, 400, 280, (ctx) => {
-    offerFolder(ctx, 14, 14, 372, 252)
-    // "?" в центре — предложение ещё не вскрыто.
+/** Кнопка у колеса: крупная надпись + подпись, цвет по тону. Кэшируется по содержимому. */
+export function wheelButtonTexture(title: string, sub: string, tone: 'spin' | 'take' | 'off'): THREE.CanvasTexture {
+  return fxCanvas(`__wbtn${tone}|${title}|${sub}`, 512, 208, (ctx) => {
+    const [top, bottom, edge, text] =
+      tone === 'spin' ? ['#6dffb0', '#0f9a58', '#053d22', '#04220f'] : tone === 'take' ? ['#ffe58a', '#d99a12', '#5a3a00', '#2a1600'] : ['#8a8496', '#4a4456', '#1c1824', '#1c1824']
+    const g = ctx.createLinearGradient(0, 0, 0, 208)
+    g.addColorStop(0, top)
+    g.addColorStop(1, bottom)
+    roundRect(ctx, 8, 8, 496, 192, 40)
+    ctx.fillStyle = g
+    ctx.fill()
+    ctx.lineWidth = 8
+    ctx.strokeStyle = edge
+    ctx.stroke()
+    ctx.fillStyle = 'rgba(255,255,255,0.25)'
+    roundRect(ctx, 26, 20, 460, 50, 24)
+    ctx.fill()
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.font = `900 88px ${FONT}`
-    ctx.fillStyle = 'rgba(0,0,0,0.3)'
-    ctx.fillText('?', 202, 138)
-    ctx.fillStyle = '#eafff3'
-    ctx.shadowColor = '#0a5e3d'
-    ctx.shadowBlur = 10
-    ctx.fillText('?', 200, 136)
-    ctx.shadowBlur = 0
-    // Флейвор — необязательный намёк, ни на что не влияет.
-    ctx.font = `700 24px ${FONT}`
-    ctx.fillStyle = 'rgba(234,255,243,0.9)'
-    ctx.fillText(OFFER_FLAVORS[idx], 200, 226)
+    ctx.fillStyle = text
+    fitFont(ctx, title, 900, 78, 440)
+    ctx.fillText(title, 256, sub ? 88 : 106)
+    if (sub) {
+      fitFont(ctx, sub, 800, 36, 440)
+      ctx.fillText(sub, 256, 156)
+    }
   })
 }
 
-/** Вскрытый оффер (открытый или только что перевёрнутый закрытый) — крупная сумма, без явного процента шанса. */
-export function offerFrontTexture(amount: number): THREE.CanvasTexture {
-  return fxCanvas(`__offerfront${amount}`, 400, 280, (ctx) => {
-    offerFolder(ctx, 14, 14, 372, 252)
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'middle'
-    ctx.font = `900 30px ${FONT}`
-    ctx.fillStyle = 'rgba(4,51,31,0.7)'
-    ctx.fillText('OFFER', 200, 66)
-    ctx.font = `900 60px ${FONT}`
-    ctx.fillStyle = '#04331f'
-    ctx.fillText(`$${amount.toLocaleString('en-US')}`, 200, 148)
-    ctx.font = `800 24px ${FONT}`
-    ctx.fillStyle = 'rgba(4,51,31,0.75)'
-    ctx.fillText('per year', 200, 200)
+export interface WheelPanelInfo {
+  /** Совпавшие навыки текущего держателя; fresh — добавились последней победой. */
+  skills: { id: SkillId; fresh: boolean }[]
+  grade: number
+  path: number[]
+  nextGrade: number | null
+  odds: number
+  status: 'ready' | 'spinning' | 'lost' | 'max'
+  last: 'win' | 'push' | 'lose' | null
+}
+
+/** Табло у колеса: кого держим, лесенка грейдов, шанс. Не кэшируется — освобождает вызывающий. */
+export function wheelPanelTexture(info: WheelPanelInfo): THREE.CanvasTexture {
+  const W = 640
+  const H = 560
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  displayPanel(ctx, W, H)
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillStyle = '#e7b64a'
+  ctx.font = `900 34px ${FONT}`
+  ctx.fillText('NEGOTIATION WHEEL', W / 2, 52)
+
+  ctx.fillStyle = 'rgba(255,242,196,0.6)'
+  ctx.font = `800 26px ${FONT}`
+  const head = info.status === 'lost' ? 'WALKED AWAY' : info.path.length > 1 ? 'SIGNED' : 'HOLDING'
+  ctx.fillText(`${head} · ×${info.grade} ★`, W / 2, 100)
+
+  // Теги совпавших навыков вместо имени — на колесе ставятся навыки, а не люди.
+  // Раскладка: 1–2 ряда по центру, шрифт подстраивается под число тегов.
+  const tags = info.skills
+  const rows = tags.length > 5 ? 2 : 1
+  const perRow = Math.ceil(tags.length / rows) || 1
+  const gap = 10
+  const tagH = rows === 2 ? 50 : 62
+  const areaW = W - 50
+  const px = rows === 2 ? 24 : 28
+  tags.forEach((t, i) => {
+    const row = Math.floor(i / perRow)
+    const inRow = row === rows - 1 ? tags.length - perRow * (rows - 1) : perRow
+    const col = i - row * perRow
+    const w = (areaW - gap * (perRow - 1)) / perRow
+    const rowW = inRow * w + (inRow - 1) * gap
+    const x = (W - rowW) / 2 + col * (w + gap)
+    const y = (rows === 2 ? 128 : 150) + row * (tagH + gap)
+    const skill = getSkill(t.id)
+    roundRect(ctx, x, y, w, tagH, 14)
+    ctx.fillStyle = info.status === 'lost' ? '#4a4456' : skill.color
+    ctx.fill()
+    if (t.fresh && info.status !== 'lost') {
+      ctx.lineWidth = 5
+      ctx.strokeStyle = '#5cff9a'
+      ctx.stroke()
+    }
+    const dark = luminance(skill.color) > 0.45
+    ctx.fillStyle = info.status === 'lost' ? '#9a94a6' : dark ? '#16121f' : '#ffffff'
+    const label = t.fresh && info.status !== 'lost' ? `+${skill.label}` : skill.label
+    fitFont(ctx, label, 800, px, w - 12)
+    ctx.fillText(label, x + w / 2, y + tagH / 2 + 1)
   })
+
+  // Лесенка грейдов: пройденные — золотом, цель — «?», потолок — MAX.
+  const steps = info.path.map((g) => `${g}★`)
+  const tail = info.status === 'max' ? 'MAX' : info.nextGrade != null && info.status !== 'lost' ? `${info.nextGrade}★?` : ''
+  const items = tail ? [...steps, tail] : steps
+  const shown = items.slice(-5)
+  const cellW = Math.min(118, (W - 60) / shown.length)
+  const y = 300
+  shown.forEach((t, i) => {
+    const x = W / 2 + (i - (shown.length - 1) / 2) * cellW
+    const isTail = tail && i === shown.length - 1
+    const isCur = isTail ? false : i === shown.length - (tail ? 2 : 1)
+    roundRect(ctx, x - cellW / 2 + 6, y - 32, cellW - 12, 64, 14)
+    ctx.fillStyle = isTail ? (info.status === 'max' ? '#ffd84a' : 'rgba(255,255,255,0.08)') : isCur ? '#e7b64a' : 'rgba(231,182,74,0.35)'
+    ctx.fill()
+    if (isTail && info.status !== 'max') {
+      ctx.setLineDash([8, 6])
+      ctx.strokeStyle = '#9fe8ff'
+      ctx.lineWidth = 3
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
+    ctx.fillStyle = isTail && info.status !== 'max' ? '#9fe8ff' : '#1b0f2b'
+    fitFont(ctx, t, 900, 32, cellW - 20)
+    ctx.fillText(t, x, y + 2)
+  })
+
+  let line1 = ''
+  let line2 = ''
+  let color = '#fff2c4'
+  if (info.status === 'lost') ((line1 = 'NO DEAL'), (line2 = 'the whole chain is lost'), (color = '#ff6b7a'))
+  else if (info.status === 'max') ((line1 = '★ MAXIMUM'), (line2 = 'nobody stronger in the pool'), (color = '#ffd84a'))
+  else if (info.status === 'spinning') ((line1 = 'NEGOTIATING…'), (line2 = `${info.odds}% to sign`), (color = '#9fe8ff'))
+  else {
+    line1 = `${info.odds}% TO SIGN`
+    line2 = info.last === 'push' ? 'haggling — free respin!' : 'yellow = free respin · red = lose all'
+    color = info.last === 'push' ? '#ffd84a' : '#5cff9a'
+  }
+  ctx.fillStyle = color
+  fitFont(ctx, line1, 900, 52, W - 60)
+  ctx.fillText(line1, W / 2, 410)
+  ctx.fillStyle = 'rgba(255,242,196,0.7)'
+  fitFont(ctx, line2, 700, 28, W - 60)
+  ctx.fillText(line2, W / 2, 470)
+  return finish(canvas)
 }
 
 // ---------- Вывеска: табло статистики, кредиты, клавиши ----------

@@ -10,7 +10,7 @@ import { makeMockCandidates } from '../data/mockCandidates'
 import { loadDatabase } from '../data/db'
 import { bestCandidate, CONSOLATION_SPINS, HIRES_TO_WIN, newBonus, openFolder as openBonusFolder, REJECTS_TO_LOSE, type BonusGame } from './bonus'
 import { rarityFor, SCATTER } from './outcome'
-import { newUpgrade, pickOffer as pickUpgradeOffer, type UpgradeGame } from './upgrade'
+import { chancesFor, newUpgrade, settleSpin, spinWheel as spinUpgradeWheel, WHEEL_SPIN_MS, type UpgradeGame } from './upgrade'
 
 export type Phase = 'idle' | 'spinning' | 'win' | 'bonus' | 'upgrade'
 export type SourceFilter = 'all' | Exclude<CandidateSource, 'mock'>
@@ -97,12 +97,12 @@ interface State {
   /** Приз выигранной миниигры — покажется как обычный выигрыш после анимации. */
   bonusPrize: SpinResult | null
 
-  /** Миниигра «Переговоры об оффере» (Hi-Lo, фаза upgrade) — заменить текущий выигрыш на кандидата
-   *  со следующим уровнем матча; сам кандидат не меняется, апгрейдится карточка целиком. */
+  /** Миниигра «Колесо торга» (фаза upgrade) — цепочка замен текущего выигрыша на кандидатов со
+   *  следующим уровнем матча; сами кандидаты не меняются, апгрейдится карточка целиком. */
   upgrade: UpgradeGame | null
   /** Когда (performance.now) началась миниигра улучшения — для анимации появления. */
   upgradeAt: number
-  /** Какие выигрыши текущего спина уже прошли через миниигру улучшения (winIndex → true), не больше раза на кандидата. */
+  /** Какие выигрыши текущего спина уже прошли через колесо торга (winIndex → true), одна цепочка на карточку. */
   upgradeApplied: Record<number, boolean>
 
   excluded: string[]
@@ -131,12 +131,13 @@ interface State {
   openFolder: (index: number) => void
   /** Закончить миниигру (после показа результата): приз → карточка кандидата, проигрыш → к спинам. */
   finishBonus: () => void
-  /** Запустить миниигру «Переговоры об оффере» для текущего выигрыша (одна попытка на кандидата). */
+  /** Запустить «Колесо торга» для текущего выигрыша (одна цепочка на карточку). */
   startUpgrade: () => void
-  /** Вскрыть закрытый оффер (индекс) в миниигре улучшения. */
-  pickOffer: (index: number) => void
-  /** Закончить миниигру улучшения: победа — карточка заменена на кандидата со следующим уровнем
-   *  матча, поражение — кандидат потерян. */
+  /** Крутить колесо торга (следующая ступень или респин после жёлтого сектора). */
+  spinWheel: () => void
+  /** Забрать текущего держателя цепочки (на нулевой ступени — отказаться от торга без потерь). */
+  takeUpgrade: () => void
+  /** Закончить проигранную цепочку: кандидат и всё набранное потеряны. */
   finishUpgrade: () => void
 }
 
@@ -316,7 +317,61 @@ export const useGame = create<State>((set, get) => {
   }
 
   let finishTimer: ReturnType<typeof setTimeout> | undefined
-  let finishUpgradeTimer: ReturnType<typeof setTimeout> | undefined
+  let upgradeTimer: ReturnType<typeof setTimeout> | undefined
+
+  /** Цель следующей ступени колеса торга: невыпадавший кандидат со следующим уровнем матча выше
+   *  `grade`, не исходный и не пройденный по цепочке. null — выше никого, это потолок. */
+  const pickUpgradeTarget = (holder: Candidate, grade: number, passed: Candidate[]) => {
+    const s = get()
+    const g = s.upgrade
+    // Кандидаты, ждущие своей очереди в этом же спине, тоже не годятся в цели — иначе дубль.
+    const waiting = s.result?.wins.map((w) => w.candidate.id) ?? []
+    const skip = new Set([...s.excluded, ...waiting, ...(g ? [g.originId] : []), ...passed.map((c) => c.id)])
+    const pool = upgradeCandidates(s.filtered, s.targets, skip, holder.id, grade)
+    if (!pool.length) return null
+    const candidate = pool[Math.floor(Math.random() * pool.length)]
+    return { candidate, grade: countTargets(candidate, new Set(s.targets)) }
+  }
+
+  const wheelOdds = (g: UpgradeGame) => `${Math.round(chancesFor(g.grade).win)}% to sign`
+
+  /** Совпавшие навыки кандидата (id, без повторов) — на колесе показываем их, а не имена людей. */
+  const matchedSkills = (c: Candidate) => {
+    const t = new Set(get().targets)
+    return [...new Set(c.skills.filter((sk) => t.has(sk)))]
+  }
+  /** Навыки, которые добавила последняя победа по сравнению с предыдущим держателем. */
+  const freshSkills = (g: UpgradeGame) => {
+    const before = new Set(g.prev ? matchedSkills(g.prev) : [])
+    return matchedSkills(g.holder)
+      .filter((sk) => !before.has(sk))
+      .map((sk) => getSkill(sk).label)
+  }
+
+  /** Колесо остановилось — применяем итог и пишем на табло. */
+  const settleWheel = () => {
+    const s = get()
+    if (s.phase !== 'upgrade' || !s.upgrade || s.upgrade.status !== 'spinning') return
+    const g = settleSpin(s.upgrade, pickUpgradeTarget)
+    let message: string
+    if (g.last === 'push') message = `They're haggling — free respin! ${g.grade}★ → ${g.nextGrade}★ · ${wheelOdds(g)}.`
+    else if (g.status === 'lost') message = `Red! The candidate walks away${g.step ? ` and the whole ${g.step}-step chain is gone` : ''}.`
+    else {
+      const fresh = freshSkills(g)
+      const plus = fresh.length ? ` +${fresh.join(', +')}` : ''
+      message =
+        g.status === 'max'
+          ? `Signed! ×${g.grade}${plus} — ★ MAXIMUM, nobody stronger in the pool. TAKE it!`
+          : `Signed! ×${g.grade}${plus}. TAKE it or risk it all: ${g.grade}★ → ${g.nextGrade}★ · ${wheelOdds(g)}.`
+    }
+    set({ upgrade: g, message })
+    if (g.status === 'lost') {
+      upgradeTimer = setTimeout(() => {
+        if (get().phase === 'upgrade' && get().upgrade === g) get().finishUpgrade()
+      }, 2200)
+    }
+    persist()
+  }
 
   /** Запуск миниигры: барабаны уезжают, в окне — 12 папок. */
   const startBonus = (scatters: number) => {
@@ -429,7 +484,10 @@ export const useGame = create<State>((set, get) => {
         return false
       }
       if (s.phase === 'upgrade') {
-        if (s.upgrade && s.upgrade.status !== 'play') get().finishUpgrade()
+        const st = s.upgrade?.status
+        if (st === 'ready') get().spinWheel()
+        else if (st === 'max') get().takeUpgrade()
+        else if (st === 'lost') get().finishUpgrade()
         return false
       }
       // Неразобранные кандидаты при новом спине автоматически обмениваются на кредиты.
@@ -715,80 +773,80 @@ export const useGame = create<State>((set, get) => {
       // Апгрейдится КАРТОЧКА, а не сам кандидат: при победе текущий кандидат целиком заменяется
       // на другого, честно подобранного заранее из пула со следующим уровнем матча.
       if (s.upgradeApplied[s.winIndex]) return
-      const pool = upgradeCandidates(s.filtered, s.targets, new Set(s.excluded), w.candidate.id, w.matched.length)
-      if (!pool.length) return
-      const nextCandidate = pool[Math.floor(Math.random() * pool.length)]
+      const nx = pickUpgradeTarget(w.candidate, w.matched.length, [])
+      if (!nx) return
+      const g = newUpgrade(w.candidate, w.matched.length, nx.candidate, nx.grade)
+      clearTimeout(upgradeTimer)
       set({
         phase: 'upgrade',
         auto: false,
         winOpen: false,
-        upgrade: newUpgrade(w.candidate.id, nextCandidate, w.matched.length),
+        upgrade: g,
         upgradeAt: performance.now(),
-        message: `Counter-offer: pick one closed offer. Higher than their ask — a stronger match steps in. Same — nothing changes. Lower — they walk.`,
+        message: `Negotiation wheel ${g.grade}★ → ${nx.grade}★ · ${wheelOdds(g)}. Green — they sign, yellow — free respin, red — they walk and you lose everything.`,
       })
     },
 
-    pickOffer: (index) => {
+    spinWheel: () => {
       const s = get()
       if (s.phase !== 'upgrade' || !s.upgrade) return
-      if (s.upgrade.status !== 'play') return get().finishUpgrade()
-      const g = pickUpgradeOffer(s.upgrade, index)
+      const g = spinUpgradeWheel(s.upgrade)
       if (g === s.upgrade) return
-      const note =
-        g.status === 'won'
-          ? `Higher offer! Deal — a stronger match steps in.`
-          : g.status === 'pushed'
-            ? `Same offer — nothing changes.`
-            : `Lower offer. No deal — the candidate walks away.`
-      set({ upgrade: g, message: note })
-      clearTimeout(finishUpgradeTimer)
-      finishUpgradeTimer = setTimeout(() => {
-        if (get().phase === 'upgrade' && get().upgrade === g) get().finishUpgrade()
-      }, 1800)
+      set({ upgrade: g, message: `Negotiating ${g.grade}★ → ${g.nextGrade}★…` })
+      clearTimeout(upgradeTimer)
+      upgradeTimer = setTimeout(settleWheel, WHEEL_SPIN_MS)
+    },
+
+    takeUpgrade: () => {
+      const s = get()
+      const g = s.upgrade
+      if (s.phase !== 'upgrade' || !g || (g.status !== 'ready' && g.status !== 'max')) return
+      clearTimeout(upgradeTimer)
+      const w = s.result?.wins[s.winIndex]
+      if (!g.step || !s.result || !w) {
+        // Ни одной ступени не пройдено — просто отказ от торга, карточка остаётся как была.
+        set({ phase: 'win', winOpen: true, upgrade: null, message: w ? `${w.candidate.name} stays at ×${w.matched.length}.` : '' })
+        return
+      }
+      // Исходный кандидат и промежуточные ступени больше не выпадут; держатель показывается в карточке.
+      const holder = g.holder
+      const targetSet = new Set(s.targets)
+      const matched = [...new Set(holder.skills.filter((sk) => targetSet.has(sk)))]
+      const rarity = rarityFor(matched.length) ?? w.rarity
+      const wins = s.result.wins.map((ww, i) => (i === s.winIndex ? { ...w, candidate: holder, matched, rarity } : ww))
+      const used = [g.originId, ...g.passed.slice(0, -1).map((c) => c.id)]
+      set({
+        result: { ...s.result, wins },
+        excluded: [...s.excluded, ...used],
+        upgradeApplied: { ...s.upgradeApplied, [s.winIndex]: true },
+        phase: 'win',
+        winOpen: true,
+        upgrade: null,
+        message: `Deal! ${g.step > 1 ? `${g.step} steps up — ` : ''}${holder.name} ×${matched.length}.`,
+      })
+      refreshPool()
+      persist()
     },
 
     finishUpgrade: () => {
       const s = get()
-      if (s.phase !== 'upgrade' || !s.upgrade || s.upgrade.status === 'play') return
-      clearTimeout(finishUpgradeTimer)
       const g = s.upgrade
+      if (s.phase !== 'upgrade' || !g || g.status !== 'lost') return
+      clearTimeout(upgradeTimer)
       const w = s.result?.wins[s.winIndex]
-      if (g.status === 'won' && s.result && w) {
-        // Победа заменяет карточку целиком на честно выбранного заранее nextCandidate — исходный
-        // кандидат не трогается, просто больше не показывается (считается «обменянным»).
-        const targetSet = new Set(s.targets)
-        const nextCandidate = g.nextCandidate
-        const matched = [...new Set(nextCandidate.skills.filter((sk) => targetSet.has(sk)))]
-        const rarity = rarityFor(matched.length) ?? w.rarity
-        const wins = s.result.wins.map((ww, i) => (i === s.winIndex ? { ...w, candidate: nextCandidate, matched, rarity } : ww))
-        markUsed(w.candidate)
-        set({
-          result: { ...s.result, wins },
-          upgradeApplied: { ...s.upgradeApplied, [s.winIndex]: true },
-          phase: 'win',
-          winOpen: true,
-          upgrade: null,
-          message: `Deal! Stronger match found — ${nextCandidate.name} ×${matched.length}.`,
-        })
-      } else if (g.status === 'pushed') {
-        // Пуш: попытка сгорает, но кандидат остаётся при своём — карточка просто открывается заново.
-        set({
-          upgrade: null,
-          upgradeApplied: { ...s.upgradeApplied, [s.winIndex]: true },
-          phase: 'win',
-          winOpen: true,
-          message: w ? `Push — ${w.candidate.name} stays at the same match.` : 'Push — nothing changes.',
-        })
-      } else {
-        set({ upgrade: null, upgradeApplied: { ...s.upgradeApplied, [s.winIndex]: true } })
-        if (w) {
-          // Возвращаемся в фазу 'win' — advance() ожидает её (как после exchange/keep) и либо
-          // покажет следующего кандидата этого спина, либо (через afterWins) уйдёт в 'idle'/бонус.
-          set({ phase: 'win', winOpen: true })
-          markUsed(w.candidate)
-          advance(`${w.candidate.name} walked away from the negotiation — no deal.`)
-        } else set({ phase: 'idle', winOpen: false })
-      }
+      // Проигрыш сжигает всю цепочку: исходный кандидат и все выигранные по пути уходят.
+      set({
+        upgrade: null,
+        upgradeApplied: { ...s.upgradeApplied, [s.winIndex]: true },
+        excluded: [...s.excluded, g.originId, ...g.passed.map((c) => c.id)],
+      })
+      refreshPool()
+      if (w) {
+        // Возвращаемся в фазу 'win' — advance() ожидает её (как после exchange/keep) и либо
+        // покажет следующего кандидата этого спина, либо (через afterWins) уйдёт в 'idle'/бонус.
+        set({ phase: 'win', winOpen: true })
+        advance(`The candidate walked away${g.step ? ` — ${g.step} ${plural(g.step, 'step', 'steps', 'steps')} lost` : ''}. No deal.`)
+      } else set({ phase: 'idle', winOpen: false })
       persist()
     },
 

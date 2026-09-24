@@ -6,7 +6,7 @@ import { useGame } from '../game/store'
 import { MAX_LINES, minLinesFor, REELS, type Payline } from '../game/outcome'
 import { Reel } from './Reel'
 import { BonusBoard } from './BonusBoard'
-import { UpgradeBoard } from './UpgradeBoard'
+import { UpgradeWheel } from './UpgradeWheel'
 import { Sparks } from './Sparks'
 import { iconKeyTexture, keyLabelTexture, lineTagTexture, wideLabelTexture, makeCreditsDisplay, makeLinesDisplay, makeMessageDisplay, makeStatsDisplay, signTexture } from './textures'
 import { describeFilter } from '../game/store'
@@ -936,7 +936,7 @@ export function SlotMachine() {
         <Reel key={i} index={i} x={reelX(i)} />
       ))}
       <BonusBoard />
-      <UpgradeBoard />
+      <UpgradeWheel />
       <Paylines />
       <Sparks />
       <Sign />
