@@ -8,12 +8,15 @@ import { Reel } from './Reel'
 import { BonusBoard } from './BonusBoard'
 import { UpgradeBoard } from './UpgradeBoard'
 import { Sparks } from './Sparks'
-import { keyLabelTexture, lineTagTexture, wideLabelTexture, makeLinesDisplay, makeMessageDisplay, signTexture } from './textures'
+import { iconKeyTexture, keyLabelTexture, lineTagTexture, wideLabelTexture, makeCreditsDisplay, makeLinesDisplay, makeMessageDisplay, makeStatsDisplay, signTexture } from './textures'
+import { describeFilter } from '../game/store'
+import { plural, REFILL_AMOUNT } from '../game/economy'
+import { openSettings, openShortlist } from '../ui/uiState'
 import { sfx } from '../audio/sfx'
-import { REEL_GAP, reelX, ROW_H, rowY, WIN_H, WIN_W } from './layout'
+import { BASE_WIN_H, BASE_WIN_W, REEL_GAP, reelX, ROW_H, rowY, useLayoutVersion, WIN_H, WIN_W } from './layout'
 
 const SIDE = 0.72
-const OUTER_W = WIN_W + SIDE * 2
+const OUTER_W = () => WIN_W + SIDE * 2
 const DEPTH = 2.2
 const FRONT_Z = 0.42
 const BODY_Z = FRONT_Z - DEPTH / 2
@@ -23,7 +26,7 @@ const BOT_H = 0.66
 /** Высота тумбы под окном и вывески над ним. */
 const BASE_H = 1.9
 const SIGN_H = 1.3
-const DECK_Y = -WIN_H / 2 - BOT_H - 0.02
+const DECK_Y = () => -WIN_H / 2 - BOT_H - 0.02
 /** Портретный экран: клавиши крупнее и в два ряда. */
 const isCompact = (aspect: number) => aspect < 0.9
 const deckDepth = (compact: boolean) => (compact ? 1.9 : 1.0)
@@ -61,6 +64,7 @@ function shadowGradientTexture(flip: boolean) {
 }
 
 function Cabinet() {
+  useLayoutVersion()
   const topShade = useMemo(() => shadowGradientTexture(false), [])
   const botShade = useMemo(() => shadowGradientTexture(true), [])
   const bodyMat = <meshStandardMaterial color={BODY} metalness={0.35} roughness={0.38} />
@@ -74,10 +78,10 @@ function Cabinet() {
           {bodyMat}
         </RoundedBox>
       ))}
-      <RoundedBox args={[OUTER_W, TOP_H, DEPTH]} radius={0.08} position={[0, WIN_H / 2 + TOP_H / 2, BODY_Z]}>
+      <RoundedBox args={[OUTER_W(), TOP_H, DEPTH]} radius={0.08} position={[0, WIN_H / 2 + TOP_H / 2, BODY_Z]}>
         {bodyMat}
       </RoundedBox>
-      <RoundedBox args={[OUTER_W, BOT_H, DEPTH]} radius={0.08} position={[0, -WIN_H / 2 - BOT_H / 2, BODY_Z]}>
+      <RoundedBox args={[OUTER_W(), BOT_H, DEPTH]} radius={0.08} position={[0, -WIN_H / 2 - BOT_H / 2, BODY_Z]}>
         {bodyMat}
       </RoundedBox>
       {/* Задняя стенка */}
@@ -130,12 +134,12 @@ function Cabinet() {
       <FrontDisplays />
 
       {/* Тумба */}
-      <RoundedBox args={[OUTER_W, BASE_H, DEPTH + 0.3]} radius={0.1} position={[0, -WIN_H / 2 - BOT_H - BASE_H / 2, BODY_Z + 0.15]}>
+      <RoundedBox args={[OUTER_W(), BASE_H, DEPTH + 0.3]} radius={0.1} position={[0, -WIN_H / 2 - BOT_H - BASE_H / 2, BODY_Z + 0.15]}>
         <meshStandardMaterial color={BODY_DARK} metalness={0.3} roughness={0.5} />
       </RoundedBox>
       {/* Неоновая полоса и лоток для «монет» */}
       <mesh position={[0, -WIN_H / 2 - BOT_H - 0.6, FRONT_Z + 0.31]}>
-        <boxGeometry args={[OUTER_W - 0.5, 0.05, 0.02]} />
+        <boxGeometry args={[OUTER_W() - 0.5, 0.05, 0.02]} />
         <meshStandardMaterial color="#3ff6ff" emissive="#3ff6ff" emissiveIntensity={2.5} toneMapped={false} />
       </mesh>
       <group position={[0, -WIN_H / 2 - BOT_H - 1.12, FRONT_Z + 0.3]}>
@@ -148,7 +152,7 @@ function Cabinet() {
         </mesh>
       </group>
       <mesh position={[0, -WIN_H / 2 - BOT_H - BASE_H + 0.1, FRONT_Z + 0.31]}>
-        <boxGeometry args={[OUTER_W - 0.5, 0.05, 0.02]} />
+        <boxGeometry args={[OUTER_W() - 0.5, 0.05, 0.02]} />
         <meshStandardMaterial color="#ff3fd8" emissive="#ff3fd8" emissiveIntensity={2.5} toneMapped={false} />
       </mesh>
     </group>
@@ -159,26 +163,28 @@ function Cabinet() {
 const INFO_W = 2.3
 const OPEN_W = 1.35
 const DISPLAY_H = BOT_H - 0.16
-const MSG_W = WIN_W - INFO_W - OPEN_W - 0.24
+const MSG_W = () => WIN_W - INFO_W - OPEN_W - 0.24
 
 function FrontDisplays() {
+  const layoutVersion = useLayoutVersion()
   const message = useGame((s) => s.message)
   const phase = useGame((s) => s.phase)
   const auto = useGame((s) => s.auto)
   const lineCount = useGame((s) => s.lines.length)
   const cost = useGame((s) => s.cost)
-  const msg = useMemo(() => makeMessageDisplay(Math.round((MSG_W / DISPLAY_H) * 120), 120), [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const msg = useMemo(() => makeMessageDisplay(Math.round((MSG_W() / DISPLAY_H) * 120), 120), [layoutVersion])
   const info = useMemo(() => makeLinesDisplay(Math.round((INFO_W / DISPLAY_H) * 120), 120), [])
   useEffect(() => msg.draw(message, phase), [msg, message, phase])
   useEffect(() => info.draw(lineCount, cost, auto), [info, lineCount, cost, auto])
   const y = -WIN_H / 2 - BOT_H / 2
   return (
     <group position={[0, y, FRONT_Z + 0.012]}>
-      <mesh position={[-WIN_W / 2 + MSG_W / 2, 0, 0]}>
-        <planeGeometry args={[MSG_W, DISPLAY_H]} />
+      <mesh position={[-WIN_W / 2 + MSG_W() / 2, 0, 0]}>
+        <planeGeometry args={[MSG_W(), DISPLAY_H]} />
         <meshBasicMaterial map={msg.tex} transparent toneMapped={false} />
       </mesh>
-      <OpenButton x={-WIN_W / 2 + MSG_W + 0.12 + OPEN_W / 2} />
+      <OpenButton x={-WIN_W / 2 + MSG_W() + 0.12 + OPEN_W / 2} />
       <mesh position={[WIN_W / 2 - INFO_W / 2, 0, 0]}>
         <planeGeometry args={[INFO_W, DISPLAY_H]} />
         <meshBasicMaterial map={info.tex} transparent toneMapped={false} />
@@ -279,6 +285,7 @@ function tagLayout(lines: Payline[], side: 0 | 4) {
  * (только линии выигравшего комбо). В остальное время барабаны ничем не перекрыты.
  */
 function Paylines() {
+  const layoutVersion = useLayoutVersion()
   const lines = useGame((s) => s.lines)
   const hovered = useRef<number | null>(null)
   const segMeshes = useRef<{ mesh: THREE.Mesh; line: number }[]>([])
@@ -345,7 +352,8 @@ function Paylines() {
       })
     }
     return { segments, tags }
-  }, [lines])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, layoutVersion])
 
   useFrame(({ clock }, dt) => {
     // Сглаживание по времени, а не по кадрам — одинаково при любом FPS.
@@ -406,13 +414,158 @@ function Paylines() {
 
 const BULB_COLORS = ['#ff3fd8', '#ffd84a', '#3ff6ff']
 
+/** Внутренние поля вывески: лампочки по краю, внутри — табло и название. */
+const SIGN_PAD_X = 0.42
+const SIGN_INNER_H = SIGN_H - 0.5
+const SIGN_KEY_W = 0.74
+/** Пикселей текстуры табло на единицу мира — чёткий текст на больших экранах. */
+const DISPLAY_PPU = 320
+
+/** Табло статистики слева на вывеске: источник данных, пул, подходящие, просмотренные, спины, находки. */
+function StatsDisplay({ x, w }: { x: number; w: number }) {
+  const db = useGame((s) => s.db)
+  const pool = useGame((s) => s.poolInfo)
+  const filter = useGame((s) => s.settings.filter)
+  const source = useGame((s) => s.settings.source)
+  const stats = useGame((s) => s.stats)
+  const skillCount = useGame((s) => s.targets.length)
+  const h = SIGN_INNER_H
+  const disp = useMemo(() => makeStatsDisplay(Math.round(w * DISPLAY_PPU), Math.round(h * DISPLAY_PPU)), [w, h])
+  useEffect(() => {
+    const src = source !== 'all' ? (source === 'github' ? 'GITHUB' : 'JSON RESUME') : 'ALL SOURCES'
+    const flt = filter.trim() ? ` · ${describeFilter(filter).toUpperCase()}` : ''
+    const status =
+      db.status === 'loading'
+        ? 'LOADING DATABASE…'
+        : db.status === 'demo'
+          ? `DEMO CANDIDATES · ${skillCount} ${plural(skillCount, 'SKILL', 'SKILLS', 'SKILLS')}`
+          : `${src}${flt} · ${skillCount} ${plural(skillCount, 'SKILL', 'SKILLS', 'SKILLS')}`
+    const dot = db.status === 'loading' ? '#ffd84a' : db.status === 'demo' ? '#ff9f43' : '#5cff9a'
+    disp.draw(status, dot, [
+      { label: 'POOL', value: pool.total.toLocaleString('en-US') },
+      { label: 'ELIGIBLE', value: pool.eligible.toLocaleString('en-US') },
+      { label: 'SEEN', value: String(pool.seen) },
+      { label: 'SPINS', value: String(stats.spins) },
+      { label: 'FINDS', value: String(stats.wins) },
+    ])
+  }, [disp, db.status, pool, filter, source, stats.spins, stats.wins, skillCount])
+  return (
+    <mesh position={[x, 0, 0]}>
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial map={disp.tex} transparent toneMapped={false} />
+    </mesh>
+  )
+}
+
+/** Табло кредитов справа на вывеске: число плавно докручивается; без кредитов — клик просит бюджет у HRD. */
+function CreditsDisplay({ x, w }: { x: number; w: number }) {
+  const h = SIGN_INNER_H
+  const disp = useMemo(() => makeCreditsDisplay(Math.round(w * DISPLAY_PPU), Math.round(h * DISPLAY_PPU)), [w, h])
+  const shown = useRef(useGame.getState().credits)
+  const drawn = useRef('')
+  const hover = useHoverCursor()
+  useFrame(({ clock }, dt) => {
+    const { credits, cost, phase } = useGame.getState()
+    const broke = credits < cost && phase === 'idle'
+    const d = credits - shown.current
+    shown.current = Math.abs(d) < 1 ? credits : shown.current + d * (1 - Math.exp(-dt * 8))
+    const value = Math.round(shown.current)
+    const blink = broke && Math.floor(clock.elapsedTime * 2.5) % 2 === 0
+    const key = `${value}|${broke}|${blink}`
+    if (key === drawn.current) return
+    drawn.current = key
+    disp.draw(value, broke ? REFILL_AMOUNT : null, blink)
+  })
+  useEffect(() => {
+    drawn.current = ''
+  }, [disp])
+  return (
+    <mesh
+      position={[x, 0, 0]}
+      onClick={(e) => {
+        const { credits, cost, phase, refill } = useGame.getState()
+        if (!(credits < cost && phase === 'idle')) return
+        e.stopPropagation()
+        sfx.click()
+        refill()
+      }}
+      {...hover}
+    >
+      <planeGeometry args={[w, h]} />
+      <meshBasicMaterial map={disp.tex} transparent toneMapped={false} />
+    </mesh>
+  )
+}
+
+/** Клавиша на вывеске (лицом к игроку): золотая рамка, светлая панель, значок. */
+function SignKey({ x, w, h, label, onPress }: { x: number; w: number; h: number; label: THREE.Texture; onPress: () => void }) {
+  const group = useRef<THREE.Group>(null!)
+  const face = useRef<THREE.MeshStandardMaterial>(null!)
+  const pressed = useRef(0)
+  const over = useRef(false)
+  const col = useMemo(() => new THREE.Color(), [])
+  useFrame((_, dt) => {
+    pressed.current = Math.max(0, pressed.current - dt * 6)
+    group.current.position.z = 0.05 - pressed.current * 0.04
+    col.set(over.current ? '#ffcf4a' : '#e6dfd0')
+    face.current.color.lerp(col, 1 - Math.exp(-dt * 12))
+    face.current.emissive.copy(face.current.color)
+    face.current.emissiveIntensity = over.current ? 0.45 : 0.12
+  })
+  return (
+    <group
+      ref={group}
+      position={[x, 0, 0.05]}
+      onClick={(e) => {
+        e.stopPropagation()
+        pressed.current = 1
+        sfx.click()
+        onPress()
+      }}
+      onPointerOver={() => {
+        over.current = true
+        document.body.style.cursor = 'pointer'
+      }}
+      onPointerOut={() => {
+        over.current = false
+        document.body.style.cursor = ''
+      }}
+    >
+      <RoundedBox args={[w, h, 0.1]} radius={0.04}>
+        <meshStandardMaterial color={GOLD} metalness={0.7} roughness={0.3} />
+      </RoundedBox>
+      <mesh position={[0, 0, 0.052]}>
+        <planeGeometry args={[w - 0.08, h - 0.08]} />
+        <meshStandardMaterial ref={face} color="#e6dfd0" roughness={0.5} toneMapped={false} />
+      </mesh>
+      <mesh position={[0, 0, 0.056]}>
+        <planeGeometry args={[Math.min(w - 0.12, (h - 0.12) * (256 / 280)), Math.min(h - 0.12, (w - 0.12) * (280 / 256))]} />
+        <meshBasicMaterial map={label} transparent toneMapped={false} />
+      </mesh>
+    </group>
+  )
+}
+
+/**
+ * Вывеска: лампочки по краю, по центру — название, слева — табло статистики,
+ * справа — табло кредитов и клавиши шорт-листа и настроек (вместо отдельной верхней полосы).
+ */
 function Sign() {
+  useLayoutVersion()
   const tex = useMemo(() => signTexture(), [])
-  const W = OUTER_W + 0.3
+  const shortlistCount = useGame((s) => s.shortlist.length)
+  const W = OUTER_W() + 0.3
   const H = SIGN_H
+  const inner = W - SIGN_PAD_X * 2
+  const titleH = SIGN_INNER_H
+  const titleW = Math.min(titleH * 4, inner * 0.3)
+  const sideW = (inner - titleW) / 2 - 0.16
+  const leftX = -W / 2 + SIGN_PAD_X + sideW / 2
+  const rightStart = titleW / 2 + 0.16
+  const creditsW = sideW - SIGN_KEY_W * 2 - 0.2
   const bulbs = useMemo(() => {
     const pts: [number, number][] = []
-    const nx = 14
+    const nx = Math.round(W / 0.62)
     const ny = 3
     for (let i = 0; i <= nx; i++) {
       const x = -W / 2 + 0.2 + (i * (W - 0.4)) / nx
@@ -425,7 +578,7 @@ function Sign() {
     }
     for (let j = ny; j >= 1; j--) pts.push([-W / 2 + 0.2, H / 2 - 0.12 - (j * (H - 0.24)) / (ny + 1)])
     return pts
-  }, [W])
+  }, [W, H])
   const mats = useRef<(THREE.MeshStandardMaterial | null)[]>([])
 
   useFrame(({ clock }) => {
@@ -447,10 +600,16 @@ function Sign() {
       <RoundedBox args={[W, H, 0.6]} radius={0.12}>
         <meshStandardMaterial color={BODY} metalness={0.35} roughness={0.38} />
       </RoundedBox>
-      <mesh position={[0, 0, 0.305]}>
-        <planeGeometry args={[Math.min(W - 0.55, (H - 0.4) * 6.5), H - 0.4]} />
-        <meshBasicMaterial map={tex} toneMapped={false} />
-      </mesh>
+      <group position={[0, 0, 0.305]}>
+        <mesh>
+          <planeGeometry args={[titleW, titleH]} />
+          <meshBasicMaterial map={tex} toneMapped={false} />
+        </mesh>
+        <StatsDisplay x={leftX} w={sideW} />
+        <CreditsDisplay x={rightStart + creditsW / 2} w={creditsW} />
+        <SignKey x={rightStart + creditsW + 0.1 + SIGN_KEY_W / 2} w={SIGN_KEY_W} h={SIGN_INNER_H} label={iconKeyTexture('star', 'SHORTLIST', shortlistCount)} onPress={openShortlist} />
+        <SignKey x={rightStart + creditsW + 0.2 + SIGN_KEY_W * 1.5} w={SIGN_KEY_W} h={SIGN_INNER_H} label={iconKeyTexture('gear', 'SETTINGS')} onPress={openSettings} />
+      </group>
       {bulbs.map(([x, y], i) => (
         <mesh key={i} position={[x, y, 0.32]}>
           <sphereGeometry args={[0.065, 12, 12]} />
@@ -618,7 +777,7 @@ const lineWord = (n: number) => (n === 1 ? 'LINE' : 'LINES')
 function deckLayout(compact: boolean) {
   if (!compact)
     return {
-      auto: { x: -OUTER_W / 2 + 0.95, z: 0, w: 1.25, d: 0.64 },
+      auto: { x: -OUTER_W() / 2 + 0.95, z: 0, w: 1.25, d: 0.64 },
       presets: LINE_PRESETS.map((_, i) => ({
         x: -2.8 + i * 0.82,
         z: 0,
@@ -627,23 +786,24 @@ function deckLayout(compact: boolean) {
       })),
       minus: { x: 1.45, z: 0, r: 0.3 },
       plus: { x: 2.3, z: 0, r: 0.3 },
-      spin: { x: OUTER_W / 2 - 1.15, z: 0, r: 0.46 },
+      spin: { x: OUTER_W() / 2 - 1.15, z: 0, r: 0.46 },
     }
   return {
-    auto: { x: -OUTER_W / 2 + 2.1, z: 0.45, w: 3.6, d: 0.72 },
+    auto: { x: -OUTER_W() / 2 + 2.1, z: 0.45, w: 3.6, d: 0.72 },
     presets: LINE_PRESETS.map((_, i) => ({
-      x: -OUTER_W / 2 + 0.75 + i * 1.22,
+      x: -OUTER_W() / 2 + 0.75 + i * 1.22,
       z: -0.45,
       w: 1.08,
       d: 0.72,
     })),
-    minus: { x: OUTER_W / 2 - 2.35, z: -0.45, r: 0.42 },
-    plus: { x: OUTER_W / 2 - 0.9, z: -0.45, r: 0.42 },
-    spin: { x: OUTER_W / 2 - 1.8, z: 0.45, r: 0.62 },
+    minus: { x: OUTER_W() / 2 - 2.35, z: -0.45, r: 0.42 },
+    plus: { x: OUTER_W() / 2 - 0.9, z: -0.45, r: 0.42 },
+    spin: { x: OUTER_W() / 2 - 1.8, z: 0.45, r: 0.62 },
   }
 }
 
 function ControlDeck() {
+  useLayoutVersion()
   const aspect = useThree((s) => s.size.width / s.size.height)
   const compact = isCompact(aspect)
   const L = deckLayout(compact)
@@ -657,9 +817,9 @@ function ControlDeck() {
 
   return (
     // Панель наклонена вокруг заднего края, чтобы не закрывать табло над ней.
-    <group position={[0, DECK_Y - 0.06, FRONT_Z + 0.08]} rotation={[deckTilt(compact), 0, 0]}>
+    <group position={[0, DECK_Y() - 0.06, FRONT_Z + 0.08]} rotation={[deckTilt(compact), 0, 0]}>
       <group position={[0, 0, D / 2]}>
-        <RoundedBox args={[OUTER_W, 0.16, D]} radius={0.05}>
+        <RoundedBox args={[OUTER_W(), 0.16, D]} radius={0.05}>
           <meshStandardMaterial color="#2c0f45" metalness={0.4} roughness={0.35} />
         </RoundedBox>
 
@@ -710,6 +870,7 @@ function ControlDeck() {
 }
 
 function Lever() {
+  useLayoutVersion()
   const arm = useRef<THREE.Group>(null!)
   const spin = useGame((s) => s.spin)
   const spinId = useGame((s) => s.spinId)
@@ -737,7 +898,7 @@ function Lever() {
   })
 
   return (
-    <group position={[OUTER_W / 2 + 0.2, -0.75, FRONT_Z - 1.0]}>
+    <group position={[OUTER_W() / 2 + 0.2, -0.75, FRONT_Z - 1.0]}>
       <RoundedBox args={[0.34, 0.8, 0.8]} radius={0.06}>
         <meshStandardMaterial color={GOLD} metalness={0.7} roughness={0.3} />
       </RoundedBox>
@@ -767,6 +928,7 @@ function Lever() {
 }
 
 export function SlotMachine() {
+  useLayoutVersion()
   return (
     <group>
       <Cabinet />
@@ -784,17 +946,51 @@ export function SlotMachine() {
   )
 }
 
-/** Габариты для камеры и пола. */
+/** Правый край рычага относительно правого края корпуса (шар выступает за корпус). */
+const LEVER_OUT = 0.42
+
+/** Габариты автомата для камеры и пола — считаются от текущего размера окна. */
 export const MACHINE = {
-  WIN_H,
-  WIN_W,
-  OUTER_W,
+  get WIN_H() {
+    return WIN_H
+  },
+  get WIN_W() {
+    return WIN_W
+  },
+  get OUTER_W() {
+    return OUTER_W()
+  },
   FRONT_Z,
   /** Верх вывески. */
-  top: WIN_H / 2 + TOP_H + SIGN_H + 0.05,
+  get top() {
+    return WIN_H / 2 + TOP_H + SIGN_H + 0.05
+  },
   /** Низ тумбы (пол). */
-  bottom: -WIN_H / 2 - BOT_H - BASE_H,
+  get bottom() {
+    return -WIN_H / 2 - BOT_H - BASE_H
+  },
   /** Нижний край панели с кнопками (с учётом наклона). */
-  deckBottom: (aspect: number) => DECK_Y - 0.2 - deckDepth(isCompact(aspect)) * Math.sin(deckTilt(isCompact(aspect))),
+  deckBottom: (aspect: number) => DECK_Y() - 0.2 - deckDepth(isCompact(aspect)) * Math.sin(deckTilt(isCompact(aspect))),
+  /** Левый и правый край кадра: вывеска слева (она чуть шире корпуса), шар рычага справа. */
+  get left() {
+    return -OUTER_W() / 2 - 0.08
+  },
+  get right() {
+    return OUTER_W() / 2 + LEVER_OUT
+  },
   isCompact,
+}
+
+/**
+ * Размер окна барабанов под соотношение сторон экрана: автомат (от вывески до панели,
+ * от левого края корпуса до рычага) должен упираться в края кадра. Широкий экран —
+ * клетки шире, узкий — выше. Возвращает [WIN_W, WIN_H].
+ */
+export function fitWindow(aspect: number): [number, number] {
+  const kw = MACHINE.right - MACHINE.left - WIN_W
+  const kh = MACHINE.top - MACHINE.deckBottom(aspect) - WIN_H
+  const w0 = BASE_WIN_W
+  const h0 = BASE_WIN_H
+  if (aspect * (h0 + kh) >= w0 + kw) return [Math.min(w0 * 2.2, aspect * (h0 + kh) - kw), h0]
+  return [w0, Math.min(h0 * 1.6, (w0 + kw) / aspect - kh)]
 }

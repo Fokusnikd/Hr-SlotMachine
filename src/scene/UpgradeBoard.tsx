@@ -4,24 +4,25 @@ import * as THREE from 'three'
 import { useGame } from '../game/store'
 import { CLOSED_COUNT, OFFERS, type UpgradeGame } from '../game/upgrade'
 import { offerBackTexture, offerFrontTexture, keyLabelTexture } from './textures'
-import { ROW_H, WIN_H, WIN_W } from './layout'
+import { CLIP, ROW_H, useLayoutVersion, WIN_H, WIN_W } from './layout'
 import { sfx } from '../audio/sfx'
 import { sparkBus } from './Sparks'
 
 /** Миниигра «Переговоры об оффере» (Hi-Lo) в окне барабанов: одна открытая папка — ожидания
  *  кандидата (текущий грейд), пять закрытых снизу. Игрок вскрывает одну; выше открытой — победа. */
-const OPEN_Y = ROW_H * 0.72
-const ROW_Y = -ROW_H * 0.55
-const TILE_H = ROW_H - 0.1
-const TILE_W = Math.min(WIN_W / (CLOSED_COUNT + 1) - 0.16, TILE_H * (400 / 280))
-const GAP = Math.min(WIN_W / CLOSED_COUNT, TILE_W + 0.24)
-const CLIP = [new THREE.Plane(new THREE.Vector3(0, -1, 0), WIN_H / 2), new THREE.Plane(new THREE.Vector3(0, 1, 0), WIN_H / 2)]
+const OPEN_Y = () => ROW_H * 0.72
+const ROW_Y = () => -ROW_H * 0.55
+const TILE_H = () => Math.min(ROW_H - 0.1, (WIN_W / (CLOSED_COUNT + 1) - 0.16) * (280 / 400))
+const TILE_W = () => TILE_H() * (400 / 280)
+const GAP = () => Math.min(WIN_W / CLOSED_COUNT, TILE_W() + 0.24)
 /** Задержка появления после старта миниигры (пока уезжают барабаны), с. */
 const ENTER_DELAY = 0.1
 
-const closedX = (i: number) => (i - (CLOSED_COUNT - 1) / 2) * GAP
+const closedX = (i: number) => (i - (CLOSED_COUNT - 1) / 2) * GAP()
 
 export function UpgradeBoard() {
+  // Размер окна меняется под экран — перерисовываемся вместе с ним.
+  useLayoutVersion()
   const root = useRef<THREE.Group>(null!)
   const closedTiles = useRef<(THREE.Group | null)[]>([])
   const closedFaces = useRef<(THREE.MeshStandardMaterial | null)[]>([])
@@ -62,7 +63,7 @@ export function UpgradeBoard() {
         if (upgrade.status === 'won') sfx.win('rare')
         else if (upgrade.status === 'pushed') sfx.ding(3)
         else sfx.nearMiss()
-        sparkBus.emit(closedX(i), ROW_Y, 0.45, color, upgrade.status === 'won' ? 22 : 10)
+        sparkBus.emit(closedX(i), ROW_Y(), 0.45, color, upgrade.status === 'won' ? 22 : 10)
       }, 260)
       if (upgrade.status === 'won') setTimeout(() => sfx.win('legendary'), 500)
       else if (upgrade.status === 'lost') setTimeout(() => sfx.coins(6), 500)
@@ -109,13 +110,13 @@ export function UpgradeBoard() {
         <meshStandardMaterial color="#0c2a1e" roughness={0.95} clippingPlanes={CLIP} />
       </mesh>
       {/* Открытая папка — ожидания кандидата (текущий грейд). */}
-      <group position={[0, OPEN_Y, 0.1]}>
-        <mesh position={[0, TILE_H * 0.62, 0]}>
-          <planeGeometry args={[TILE_W * 1.5, TILE_H * 0.34]} />
+      <group position={[0, OPEN_Y(), 0.1]}>
+        <mesh position={[0, TILE_H() * 0.62, 0]}>
+          <planeGeometry args={[TILE_W() * 1.5, TILE_H() * 0.34]} />
           <meshBasicMaterial map={openLabel} transparent alphaTest={0.02} toneMapped={false} clippingPlanes={CLIP} />
         </mesh>
         <mesh>
-          <planeGeometry args={[TILE_W, TILE_H]} />
+          <planeGeometry args={[TILE_W(), TILE_H()]} />
           <meshStandardMaterial
             ref={(m) => {
               openFace.current = m
@@ -137,7 +138,7 @@ export function UpgradeBoard() {
         const value = shown?.closed[i]
         const revealed = shown?.picked === i && value != null
         return (
-          <group key={i} position={[closedX(i), ROW_Y, 0.1]}>
+          <group key={i} position={[closedX(i), ROW_Y(), 0.1]}>
             <group
               ref={(g) => {
                 closedTiles.current[i] = g
@@ -160,7 +161,7 @@ export function UpgradeBoard() {
               }}
             >
               <mesh>
-                <planeGeometry args={[TILE_W, TILE_H]} />
+                <planeGeometry args={[TILE_W(), TILE_H()]} />
                 <meshStandardMaterial
                   ref={(m) => {
                     closedFaces.current[i] = m
@@ -177,7 +178,7 @@ export function UpgradeBoard() {
                 />
               </mesh>
               <mesh rotation={[0, Math.PI, 0]}>
-                <planeGeometry args={[TILE_W, TILE_H]} />
+                <planeGeometry args={[TILE_W(), TILE_H()]} />
                 <meshStandardMaterial
                   map={value != null ? offerFrontTexture(OFFERS[value]) : undefined}
                   emissiveMap={value != null ? offerFrontTexture(OFFERS[value]) : undefined}

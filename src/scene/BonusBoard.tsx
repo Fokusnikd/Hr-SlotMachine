@@ -4,26 +4,27 @@ import * as THREE from 'three'
 import { useGame } from '../game/store'
 import { BOARD_SIZE, type BonusGame } from '../game/bonus'
 import { folderBackTexture, folderFrontTexture } from './textures'
-import { ROW_H, WIN_H, WIN_W } from './layout'
+import { CLIP, ROW_H, useLayoutVersion, WIN_H, WIN_W } from './layout'
 import { sfx } from '../audio/sfx'
 import { sparkBus } from './Sparks'
 
 /** Миниигра «Золотая папка» в окне барабанов: 4×3 папки, которые переворачиваются по клику. */
 const COLS = 4
-const CELL_W = WIN_W / COLS
-const FOLDER_H = ROW_H - 0.14
-const FOLDER_W = Math.min(CELL_W - 0.2, FOLDER_H * (400 / 280))
-const CLIP = [new THREE.Plane(new THREE.Vector3(0, -1, 0), WIN_H / 2), new THREE.Plane(new THREE.Vector3(0, 1, 0), WIN_H / 2)]
+const CELL_W = () => WIN_W / COLS
+const FOLDER_H = () => Math.min(ROW_H - 0.14, (CELL_W() - 0.2) * (280 / 400))
+const FOLDER_W = () => FOLDER_H() * (400 / 280)
 /** Задержка появления папок после старта бонуса (пока уезжают барабаны), с. */
 const ENTER_DELAY = 0.45
 
-const folderX = (i: number) => ((i % COLS) - (COLS - 1) / 2) * CELL_W
+const folderX = (i: number) => ((i % COLS) - (COLS - 1) / 2) * CELL_W()
 const folderY = (i: number) => (1 - Math.floor(i / COLS)) * ROW_H
 
 type Face = 'hire' | 'reject' | 'empty' | 'shield'
 const faceOf = (g: BonusGame, i: number): Face => (g.blocked.includes(i) ? 'shield' : g.board[i])
 
 export function BonusBoard() {
+  // Размер окна меняется под экран — перерисовываемся вместе с ним.
+  useLayoutVersion()
   const root = useRef<THREE.Group>(null!)
   const folders = useRef<(THREE.Group | null)[]>([])
   const backs = useRef<(THREE.MeshStandardMaterial | null)[]>([])
@@ -140,7 +141,7 @@ export function BonusBoard() {
               }}
             >
               <mesh>
-                <planeGeometry args={[FOLDER_W, FOLDER_H]} />
+                <planeGeometry args={[FOLDER_W(), FOLDER_H()]} />
                 <meshStandardMaterial
                   ref={(m) => {
                     fronts.current[i] = m
@@ -157,7 +158,7 @@ export function BonusBoard() {
                 />
               </mesh>
               <mesh rotation={[0, Math.PI, 0]}>
-                <planeGeometry args={[FOLDER_W, FOLDER_H]} />
+                <planeGeometry args={[FOLDER_W(), FOLDER_H()]} />
                 <meshStandardMaterial
                   ref={(m) => {
                     backs.current[i] = m

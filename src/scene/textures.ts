@@ -291,8 +291,10 @@ export function makeMessageDisplay(W = 1024, H = 128) {
         if (ctx.measureText(t).width > maxW) break
         a = t
       }
-      lines = [a, words.slice(i).join(' ')]
-      while (ctx.measureText(lines[1]).width > maxW && size > 12) {
+      const rest = words.slice(i).join(' ')
+      // Уменьшенным шрифтом влезло в одну строку — рисуем одну, по центру.
+      lines = rest ? [a, rest] : [a]
+      while (lines[1] && ctx.measureText(lines[1]).width > maxW && size > 12) {
         size -= 2
         ctx.font = `800 ${size}px ${FONT}`
       }
@@ -709,4 +711,397 @@ export function offerFrontTexture(amount: number): THREE.CanvasTexture {
     ctx.fillStyle = 'rgba(4,51,31,0.75)'
     ctx.fillText('per year', 200, 200)
   })
+}
+
+// ---------- Вывеска: табло статистики, кредиты, клавиши ----------
+
+/** Чёрное табло с золотой рамкой — общий фон для табло на вывеске. */
+function displayPanel(ctx: CanvasRenderingContext2D, W: number, H: number) {
+  ctx.clearRect(0, 0, W, H)
+  ctx.fillStyle = '#05020b'
+  roundRect(ctx, 3, 3, W - 6, H - 6, 18)
+  ctx.fill()
+  ctx.strokeStyle = '#e7b64a'
+  ctx.lineWidth = 6
+  ctx.stroke()
+}
+
+/** Уменьшает шрифт, пока строка не влезет в ширину. */
+function fitFont(ctx: CanvasRenderingContext2D, text: string, weight: number, size: number, maxW: number) {
+  let px = size
+  ctx.font = `${weight} ${px}px ${FONT}`
+  while (ctx.measureText(text).width > maxW && px > 10) {
+    px -= 2
+    ctx.font = `${weight} ${px}px ${FONT}`
+  }
+  return px
+}
+
+/** Табло статистики на вывеске: строка источника данных + ячейки «подпись / число». */
+export function makeStatsDisplay(W: number, H: number) {
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  const tex = finish(canvas)
+  const draw = (status: string, dot: string, cells: { label: string; value: string }[]) => {
+    displayPanel(ctx, W, H)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    // Источник данных
+    const sy = H * 0.24
+    const size = fitFont(ctx, status, 700, Math.round(H * 0.15), W - 110)
+    const tw = ctx.measureText(status).width
+    ctx.fillStyle = dot
+    ctx.shadowColor = dot
+    ctx.shadowBlur = 12
+    ctx.beginPath()
+    ctx.arc(W / 2 - tw / 2 - size * 0.7, sy, size * 0.3, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#c9fbff'
+    ctx.shadowColor = '#3ff6ff'
+    ctx.shadowBlur = 8
+    ctx.fillText(status, W / 2 + size * 0.2, sy + 1)
+    ctx.shadowBlur = 0
+    // Разделитель
+    ctx.strokeStyle = 'rgba(231,182,74,0.35)'
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    ctx.moveTo(24, H * 0.4)
+    ctx.lineTo(W - 24, H * 0.4)
+    ctx.stroke()
+    // Ячейки
+    const cw = (W - 30) / cells.length
+    cells.forEach((c, i) => {
+      const cx = 15 + cw * (i + 0.5)
+      if (i > 0) {
+        ctx.strokeStyle = 'rgba(231,182,74,0.25)'
+        ctx.beginPath()
+        ctx.moveTo(15 + cw * i, H * 0.5)
+        ctx.lineTo(15 + cw * i, H * 0.9)
+        ctx.stroke()
+      }
+      ctx.fillStyle = '#9fe8ff'
+      fitFont(ctx, c.label, 700, Math.round(H * 0.12), cw - 16)
+      ctx.fillText(c.label, cx, H * 0.53)
+      ctx.fillStyle = '#ffd6f7'
+      ctx.shadowColor = '#ff3fd8'
+      ctx.shadowBlur = 10
+      fitFont(ctx, c.value, 900, Math.round(H * 0.28), cw - 16)
+      ctx.fillText(c.value, cx, H * 0.76)
+      ctx.shadowBlur = 0
+    })
+    tex.needsUpdate = true
+  }
+  return { tex, draw }
+}
+
+/** Табло кредитов на вывеске. Когда кредиты кончились — мигает просьба к HRD (по клику). */
+export function makeCreditsDisplay(W: number, H: number) {
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  const tex = finish(canvas)
+  const draw = (value: number, refill: number | null, blink: boolean) => {
+    displayPanel(ctx, W, H)
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = '#9fe8ff'
+    ctx.font = `700 ${Math.round(H * 0.13)}px ${FONT}`
+    ctx.fillText('CREDITS', W / 2, H * 0.19)
+    const text = `◎ ${value.toLocaleString('en-US')}`
+    ctx.fillStyle = '#ffd84a'
+    ctx.shadowColor = '#ffb000'
+    ctx.shadowBlur = 16
+    fitFont(ctx, text, 900, Math.round(H * (refill != null ? 0.36 : 0.44)), W - 40)
+    ctx.fillText(text, W / 2, refill != null ? H * 0.5 : H * 0.6)
+    ctx.shadowBlur = 0
+    if (refill != null) {
+      const ask = `CLICK: ASK HRD +${refill}`
+      ctx.fillStyle = blink ? '#ff3fd8' : '#7a2a6a'
+      ctx.shadowColor = '#ff3fd8'
+      ctx.shadowBlur = blink ? 12 : 0
+      fitFont(ctx, ask, 800, Math.round(H * 0.14), W - 30)
+      ctx.fillText(ask, W / 2, H * 0.8)
+      ctx.shadowBlur = 0
+    }
+    tex.needsUpdate = true
+  }
+  return { tex, draw }
+}
+
+function starPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.beginPath()
+  for (let i = 0; i < 10; i++) {
+    const a = -Math.PI / 2 + (i * Math.PI) / 5
+    const rr = i % 2 ? r * 0.45 : r
+    ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr)
+  }
+  ctx.closePath()
+}
+
+function gearPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number) {
+  ctx.beginPath()
+  const teeth = 8
+  for (let i = 0; i < teeth * 2; i++) {
+    const a0 = (i * Math.PI) / teeth - Math.PI / teeth / 2
+    const a1 = a0 + Math.PI / teeth
+    const rr = i % 2 ? r * 0.78 : r
+    ctx.arc(cx, cy, rr, a0, a1)
+  }
+  ctx.closePath()
+  ctx.moveTo(cx + r * 0.34, cy)
+  ctx.arc(cx, cy, r * 0.34, 0, Math.PI * 2, true)
+}
+
+/** Надпись клавиши на вывеске: значок (звезда/шестерёнка), подпись и счётчик. */
+export function iconKeyTexture(icon: 'star' | 'gear', sub: string, count?: number): THREE.CanvasTexture {
+  const key = `__ikey${icon}|${sub}|${count ?? ''}`
+  const hit = cache.get(key)
+  if (hit) return hit
+  const W = 256
+  const H = 280
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  ctx.fillStyle = '#1b0f2b'
+  if (icon === 'star') starPath(ctx, W / 2, H * 0.4, 78)
+  else gearPath(ctx, W / 2, H * 0.4, 72)
+  ctx.fill('evenodd')
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  fitFont(ctx, sub, 900, 40, W - 20)
+  ctx.fillText(sub, W / 2, H * 0.85)
+  if (count != null) {
+    const txt = String(count)
+    ctx.font = `900 46px ${FONT}`
+    const bw = Math.max(64, ctx.measureText(txt).width + 30)
+    ctx.fillStyle = '#ff3fd8'
+    roundRect(ctx, W - bw - 8, 8, bw, 64, 32)
+    ctx.fill()
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText(txt, W - bw / 2 - 8, 42)
+  }
+  const tex = finish(canvas)
+  cache.set(key, tex)
+  return tex
+}
+
+// ---------- Фон: ночной офис ----------
+
+/** Детерминированный ГСЧ — фон одинаковый при каждой загрузке. */
+function rng(seed: number) {
+  let s = seed >>> 0
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0
+    return s / 4294967296
+  }
+}
+
+/**
+ * Задник «пустой офис ночью» (рисуется один раз): панорамные окна с огнями города,
+ * ряды столов с мониторами в режиме заставки, дежурная лампа, табличка EXIT и
+ * розово-голубые отсветы неона автомата. Самое интересное — у краёв: центр закрыт автоматом.
+ */
+export function nightOfficeTexture(): THREE.CanvasTexture {
+  const hit = cache.get('__nightOffice')
+  if (hit) return hit
+  const W = 2560
+  const H = 1280
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const ctx = canvas.getContext('2d')!
+  const rand = rng(20260924)
+
+  // Стена
+  let g = ctx.createLinearGradient(0, 0, 0, H)
+  g.addColorStop(0, '#06051a')
+  g.addColorStop(1, '#0d0a1e')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+
+  // Окна: небо и город
+  const winTop = H * 0.07
+  const winBot = H * 0.6
+  g = ctx.createLinearGradient(0, winTop, 0, winBot)
+  g.addColorStop(0, '#070b2a')
+  g.addColorStop(0.7, '#15123c')
+  g.addColorStop(1, '#2a1740')
+  ctx.fillStyle = g
+  ctx.fillRect(0, winTop, W, winBot - winTop)
+  // Звёзды
+  for (let i = 0; i < 140; i++) {
+    ctx.fillStyle = `rgba(220,225,255,${0.25 + rand() * 0.5})`
+    ctx.fillRect(rand() * W, winTop + rand() * (winBot - winTop) * 0.45, 2, 2)
+  }
+  // Луна — в правом верхнем углу
+  ctx.fillStyle = '#e9e6ff'
+  ctx.shadowColor = '#b9b4ff'
+  ctx.shadowBlur = 40
+  ctx.beginPath()
+  ctx.arc(W * 0.965, winTop + 70, 30, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.shadowBlur = 0
+  // Три слоя домов: дальние — синие и тусклые, ближние — тёмные с тёплыми окнами
+  const layers = [
+    { h: [0.18, 0.38], body: '#141a3e', lit: ['rgba(140,170,255,0.55)', 'rgba(200,210,255,0.4)'], p: 0.3, win: 6 },
+    { h: [0.12, 0.3], body: '#0f1230', lit: ['rgba(255,214,140,0.8)', 'rgba(170,220,255,0.7)'], p: 0.35, win: 8 },
+    { h: [0.06, 0.2], body: '#0a0b22', lit: ['rgba(255,196,110,0.95)', 'rgba(255,240,200,0.8)'], p: 0.3, win: 10 },
+  ]
+  layers.forEach((L, li) => {
+    let x = -20
+    while (x < W) {
+      const bw = 60 + rand() * 140 + li * 30
+      const top = winTop + (winBot - winTop) * (L.h[0] + rand() * (L.h[1] - L.h[0])) + li * 40
+      ctx.fillStyle = L.body
+      ctx.fillRect(x, top, bw, winBot - top)
+      for (let wy = top + 12; wy < winBot - 8; wy += L.win + 6)
+        for (let wx = x + 8; wx < x + bw - 8; wx += L.win + 5)
+          if (rand() < L.p) {
+            ctx.fillStyle = L.lit[rand() < 0.7 ? 0 : 1]
+            ctx.fillRect(wx, wy, L.win - 2, L.win)
+          }
+      if (li === 0 && rand() < 0.25) {
+        ctx.fillStyle = '#ff3b4a'
+        ctx.shadowColor = '#ff3b4a'
+        ctx.shadowBlur = 14
+        ctx.fillRect(x + bw / 2 - 3, top - 6, 6, 6)
+        ctx.shadowBlur = 0
+      }
+      x += bw + rand() * 25
+    }
+  })
+  // Блик на стекле
+  g = ctx.createLinearGradient(0, winTop, W * 0.3, winBot)
+  g.addColorStop(0, 'rgba(160,180,255,0.07)')
+  g.addColorStop(0.5, 'rgba(160,180,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, winTop, W, winBot - winTop)
+  // Импосты окна
+  ctx.fillStyle = '#05040f'
+  for (let i = 0; i <= 12; i++) ctx.fillRect((i * W) / 12 - 7, winTop, 14, winBot - winTop)
+  ctx.fillRect(0, winTop + (winBot - winTop) * 0.62, W, 8)
+  // Подоконник и потолок
+  ctx.fillStyle = '#1a1630'
+  ctx.fillRect(0, winBot, W, 12)
+  ctx.fillStyle = '#04030c'
+  ctx.fillRect(0, 0, W, winTop)
+  // Светильники в потолке — выключены, один дежурный горит
+  for (let i = 0; i < 8; i++) {
+    const lx = W * (0.04 + i * 0.13)
+    ctx.fillStyle = i === 0 || i === 7 ? '#8fa6ff' : '#15142a'
+    ctx.fillRect(lx, winTop * 0.35, W * 0.07, 10)
+  }
+  g = ctx.createRadialGradient(W * 0.075, winTop * 0.4, 0, W * 0.075, winTop * 0.4, 260)
+  g.addColorStop(0, 'rgba(143,166,255,0.35)')
+  g.addColorStop(1, 'rgba(143,166,255,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W * 0.3, H * 0.4)
+  // Табличка EXIT
+  ctx.fillStyle = '#0a2a14'
+  roundRect(ctx, W * 0.9, winTop * 0.18, 120, 46, 6)
+  ctx.fill()
+  ctx.fillStyle = '#3dff7a'
+  ctx.shadowColor = '#3dff7a'
+  ctx.shadowBlur = 18
+  ctx.font = `800 32px ${FONT}`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText('EXIT', W * 0.9 + 60, winTop * 0.18 + 24)
+  ctx.shadowBlur = 0
+
+  // Столы с мониторами
+  const deskY = H * 0.78
+  ctx.fillStyle = '#0b0918'
+  ctx.fillRect(0, winBot + 12, W, deskY - winBot)
+  for (let x = 30; x < W; x += 230 + rand() * 60) {
+    const on = rand() < 0.75
+    const mw = 120 + rand() * 40
+    const mh = mw * 0.6
+    const my = deskY - mh - 22
+    // Отсвет экрана на стене и столе
+    if (on) {
+      const hue = rand() < 0.5 ? '63,170,255' : rand() < 0.5 ? '120,90,255' : '63,246,255'
+      g = ctx.createRadialGradient(x + mw / 2, my + mh / 2, 10, x + mw / 2, my + mh / 2, mw * 1.4)
+      g.addColorStop(0, `rgba(${hue},0.28)`)
+      g.addColorStop(1, `rgba(${hue},0)`)
+      ctx.fillStyle = g
+      ctx.fillRect(x - mw, my - mw, mw * 3, mh + mw * 2)
+      ctx.fillStyle = '#05040c'
+      ctx.fillRect(x - 6, my - 6, mw + 12, mh + 12)
+      g = ctx.createLinearGradient(x, my, x + mw, my + mh)
+      g.addColorStop(0, `rgba(${hue},0.9)`)
+      g.addColorStop(1, `rgba(${hue},0.45)`)
+      ctx.fillStyle = g
+      ctx.fillRect(x, my, mw, mh)
+      // Строки кода на заставке
+      ctx.fillStyle = 'rgba(255,255,255,0.55)'
+      for (let ly = my + 10; ly < my + mh - 8; ly += 11) ctx.fillRect(x + 10 + rand() * 12, ly, 20 + rand() * (mw - 50), 4)
+    } else {
+      ctx.fillStyle = '#05040c'
+      ctx.fillRect(x - 6, my - 6, mw + 12, mh + 12)
+      ctx.fillStyle = '#10101e'
+      ctx.fillRect(x, my, mw, mh)
+    }
+    ctx.fillStyle = '#05040c'
+    ctx.fillRect(x + mw / 2 - 6, my + mh, 12, 22)
+  }
+  // Столешница
+  ctx.fillStyle = '#1b1730'
+  ctx.fillRect(0, deskY, W, 14)
+  ctx.fillStyle = '#07060f'
+  ctx.fillRect(0, deskY + 14, W, H - deskY)
+  // Спинки кресел
+  for (let x = 60; x < W; x += 250 + rand() * 50) {
+    ctx.fillStyle = '#04030a'
+    roundRect(ctx, x, deskY + 40 + rand() * 30, 110, 170, 26)
+    ctx.fill()
+  }
+  // Дежурная настольная лампа слева
+  const lx = W * 0.035
+  g = ctx.createRadialGradient(lx, deskY, 10, lx, deskY, 320)
+  g.addColorStop(0, 'rgba(255,190,110,0.5)')
+  g.addColorStop(1, 'rgba(255,190,110,0)')
+  ctx.fillStyle = g
+  ctx.fillRect(0, deskY - 320, lx + 320, 400)
+  ctx.fillStyle = '#ffcf7a'
+  ctx.beginPath()
+  ctx.moveTo(lx - 40, deskY - 90)
+  ctx.lineTo(lx + 40, deskY - 90)
+  ctx.lineTo(lx + 22, deskY - 130)
+  ctx.lineTo(lx - 22, deskY - 130)
+  ctx.closePath()
+  ctx.fill()
+  ctx.fillStyle = '#2a2233'
+  ctx.fillRect(lx - 4, deskY - 90, 8, 90)
+  // Растения по краям
+  for (const px of [W * 0.012, W * 0.985]) {
+    ctx.fillStyle = '#03020a'
+    ctx.fillRect(px - 30, H * 0.86, 60, H * 0.14)
+    for (let i = 0; i < 9; i++) {
+      ctx.beginPath()
+      ctx.ellipse(px + (rand() - 0.5) * 90, H * 0.8 - rand() * 150, 18, 60, (rand() - 0.5) * 1.6, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  // Отсветы неона автомата на стенах: розовый слева, голубой справа
+  ctx.globalCompositeOperation = 'lighter'
+  for (const [cx, col] of [
+    [0.3, '255,63,216'],
+    [0.7, '63,246,255'],
+  ] as const) {
+    g = ctx.createRadialGradient(W * cx, H * 0.5, 50, W * cx, H * 0.5, W * 0.42)
+    g.addColorStop(0, `rgba(${col},0.16)`)
+    g.addColorStop(1, `rgba(${col},0)`)
+    ctx.fillStyle = g
+    ctx.fillRect(0, 0, W, H)
+  }
+  ctx.globalCompositeOperation = 'source-over'
+
+  const tex = finish(canvas)
+  cache.set('__nightOffice', tex)
+  return tex
 }

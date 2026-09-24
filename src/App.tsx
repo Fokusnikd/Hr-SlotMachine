@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { Scene } from './scene/Scene'
-import { HUD } from './ui/HUD'
+import { closeSettings, closeShortlist, useUi } from './ui/uiState'
 import { WinModal } from './ui/WinModal'
 import { Shortlist } from './ui/Shortlist'
 import { Settings } from './ui/Settings'
@@ -12,8 +12,8 @@ import { HIRES_TO_WIN, REJECTS_TO_LOSE } from './game/bonus'
 const bonusPlaying = (s: ReturnType<typeof useGame.getState>) => s.phase === 'bonus' && s.bonus?.status === 'play'
 
 export default function App() {
-  const [shortlistOpen, setShortlistOpen] = useState(false)
-  const [settingsOpen, setSettingsOpen] = useState(false)
+  const shortlistOpen = useUi((s) => s.shortlistOpen)
+  const settingsOpen = useUi((s) => s.settingsOpen)
   const sound = useGame((s) => s.settings.sound)
 
   useEffect(() => {
@@ -68,10 +68,9 @@ export default function App() {
       <div className="stage">
         <Scene />
       </div>
-      <HUD onOpenShortlist={() => setShortlistOpen(true)} onOpenSettings={() => setSettingsOpen(true)} />
       <WinModal />
-      <Shortlist open={shortlistOpen} onClose={() => setShortlistOpen(false)} />
-      {settingsOpen && <Settings onClose={() => setSettingsOpen(false)} />}
+      <Shortlist open={shortlistOpen} onClose={closeShortlist} />
+      {settingsOpen && <Settings onClose={closeSettings} />}
       <PrivacyLink />
     </div>
   )

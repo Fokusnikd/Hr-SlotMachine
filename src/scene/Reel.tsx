@@ -5,7 +5,7 @@ import { useGame } from '../game/store'
 import { acceptedTexture, dotTexture, frameTexture, glareTexture, haloTexture, ringTexture, skillTexture } from './textures'
 import { sfx } from '../audio/sfx'
 import type { SkillId } from '../game/types'
-import { REEL_GAP, ROW_H, SYMBOL_H, SYMBOL_W, WIN_H } from './layout'
+import { CLIP, REEL_GAP, ROW_H, SYMBOL_H, SYMBOL_W, useLayoutVersion, WIN_H } from './layout'
 import { extrasFor } from '../game/fx'
 import { flipAngle, flipStart, restPose, signaturePose, SNAKE_STEP, SPARKS_PERIOD, type TilePose } from './tileFx'
 import { sparkBus } from './Sparks'
@@ -38,8 +38,6 @@ function scatterFlip(tt: number): number {
 const BADGE_W = 460 / 512
 const BADGE_H = 248 / 300
 
-/** Всё, что выходит за окно, обрезается — лента символов «уезжает» под рамку. */
-const CLIP = [new THREE.Plane(new THREE.Vector3(0, -1, 0), WIN_H / 2), new THREE.Plane(new THREE.Vector3(0, 1, 0), WIN_H / 2)]
 
 /** Быстрый старт и мягкая остановка с лёгким «перелётом» — как у механического барабана. */
 function easeOutBack(p: number) {
@@ -69,6 +67,8 @@ function randomStrip(pool: SkillId[]): SkillId[] {
  * `+1` — в верхнем, `−1` — в нижнем.
  */
 export function Reel({ index, x }: { index: number; x: number }) {
+  // Размер окна меняется под экран — перерисовываемся вместе с ним (CLIP из layout).
+  useLayoutVersion()
   const meshes = useRef<(THREE.Group | null)[]>([])
   const materials = useRef<(THREE.MeshStandardMaterial | null)[]>([])
   /** Слои-эффекты каждой плитки: блик, волна, рамка, огонёк. */
