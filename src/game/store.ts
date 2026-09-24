@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Candidate, CandidateSource, SkillId, SpinResult } from './types'
+import type { Candidate, CandidateSource, Rarity, SkillId, SpinResult } from './types'
 import { BASE_SKILLS, buildField, describeLines, linesFor, MAX_LINES, MAX_SKILLS, MIN_MATCH, MIN_SKILLS, minLinesFor, REELS, spinField, topSkills, type Field, type Payline } from './outcome'
 import { payoutFor, plural, REFILL_AMOUNT, scaleForLines, spinCost, START_CREDITS } from './economy'
 import { calibratePayScale } from './calibrate'
@@ -89,7 +89,8 @@ interface State {
   bonus: BonusGame | null
   /** Когда (performance.now) началась миниигра — для анимации появления. */
   bonusAt: number
-  /** Бонус выпал вместе с кандидатами по линиям — запустится после их разбора (число папок). */
+  /** Выпал бонус — миниигра запустится после паузы на переворот папок (число папок).
+   *  Кандидаты по линиям этого спина ждут в result.wins и показываются уже после бонуса. */
   pendingBonus: number
   /** Утешительный приз текущего бонуса, кредиты. */
   bonusConsolation: number
@@ -151,6 +152,8 @@ const initialSettings: Settings = {
 }
 
 export const ROLE_SKILLS = 20
+
+const RARITY_RANK: Record<Rarity, number> = { common: 0, rare: 1, legendary: 2 }
 
 /** Навыки позиции: топ-20 среди кандидатов, подходящих под фильтр. */
 export function roleSkillsFor(all: Candidate[], settings: Pick<Settings, 'source' | 'filter'>) {
@@ -331,13 +334,17 @@ export const useGame = create<State>((set, get) => {
     })
   }
 
-  /** После разбора кандидатов: если бонус ждёт — запускаем, иначе обратно к спинам. */
-  const afterWins = (note: string) => {
-    const pending = get().pendingBonus
-    if (pending) {
-      set({ winIndex: get().result?.wins.length ?? 0, winOpen: false, message: note })
-      startBonus(pending)
-    } else set({ phase: 'idle', winOpen: false, message: note })
+  /** Все кандидаты спина разобраны — обратно к спинам (бонус к этому моменту уже сыгран). */
+  const afterWins = (note: string) => set({ phase: 'idle', winOpen: false, message: note })
+
+  /** Текст про выпавших по линиям кандидатов. */
+  const winsText = (r: SpinResult, scale: number) => {
+    const n = r.wins.length
+    const total = r.wins.reduce((a, w) => a + payoutFor(w.matched.length, scale), 0)
+    const w = r.wins[0]
+    return n === 1
+      ? `${w.matched.length} ${plural(w.matched.length, 'skill', 'skills', 'skills')} matched on ${w.lineIds.length > 1 ? 'lines' : 'line'} ${describeLines(w.lineIds)} — ${w.candidate.name}! OPEN — card, SPIN — exchange for +${total} ◎`
+      : `${n} ${plural(n, 'person', 'people', 'people')} appeared, best ×${w.matched.length} — ${w.candidate.name}! OPEN — cards, SPIN — exchange all for +${total} ◎`
   }
 
   const markUsed = (c: Candidate) => {
@@ -440,13 +447,6 @@ export const useGame = create<State>((set, get) => {
           stats: { ...s.stats, exchanged: s.stats.exchanged + left.length },
         })
         refreshPool()
-        // Бонус этого спина ещё не сыгран — сначала миниигра.
-        if (get().pendingBonus) {
-          startBonus(get().pendingBonus)
-          set({ message: `${exchangedNote}${get().message}` })
-          persist()
-          return false
-        }
         s = get()
       }
       if (s.phase !== 'idle') return false
@@ -489,27 +489,24 @@ export const useGame = create<State>((set, get) => {
       const r = s.result!
       const n = r.wins.length
       if (r.bonus) {
+        // Бонус — первым: кандидаты по линиям ждут в result.wins и покажутся после миниигры.
         // Автозапуск останавливается: миниигра требует кликов игрока.
-        set({ auto: false, pendingBonus: r.bonus })
-      }
-      if (n) {
-        const total = r.wins.reduce((a, w) => a + payoutFor(w.matched.length, s.winScale), 0)
-        const w = r.wins[0]
-        const text =
-          n === 1
-            ? `${w.matched.length} ${plural(w.matched.length, 'skill', 'skills', 'skills')} matched on ${w.lineIds.length > 1 ? 'lines' : 'line'} ${describeLines(w.lineIds)} — ${w.candidate.name}! OPEN — card, SPIN — exchange for +${total} ◎`
-            : `${n} ${plural(n, 'person', 'people', 'people')} appeared, best ×${w.matched.length} — ${w.candidate.name}! OPEN — cards, SPIN — exchange all for +${total} ◎`
-        const withBonus = r.bonus ? `${text} · Then — GOLDEN FOLDER ×${r.bonus}!` : text
-        // Автозапуск останавливается на кандидате.
-        set({ auto: false, winAt: performance.now(), stoppedReels: stopped, phase: 'win', winIndex: 0, message: withBonus, stats: { ...s.stats, wins: s.stats.wins + n } })
-      } else if (r.bonus) {
-        set({ stoppedReels: stopped })
+        const waiting = n ? ` Bonus first — ${n} ${plural(n, 'candidate', 'candidates', 'candidates')} from the lines ${n > 1 ? 'are' : 'is'} waiting after it.` : ''
+        set({
+          auto: false,
+          pendingBonus: r.bonus,
+          stoppedReels: stopped,
+          message: `GOLDEN FOLDER ×${r.bonus}!${waiting}`,
+          ...(n ? { stats: { ...s.stats, wins: s.stats.wins + n } } : {}),
+        })
         // Пауза: папки на барабанах успевают перевернуться на «ПРИНЯТ».
         setTimeout(() => {
           const now = get()
           if (now.phase === 'spinning' && now.pendingBonus) startBonus(now.pendingBonus)
         }, 2600)
-        set({ message: `GOLDEN FOLDER ×${r.bonus}!` })
+      } else if (n) {
+        // Автозапуск останавливается на кандидате.
+        set({ auto: false, winAt: performance.now(), stoppedReels: stopped, phase: 'win', winIndex: 0, message: winsText(r, s.winScale), stats: { ...s.stats, wins: s.stats.wins + n } })
       } else if (r.nearMiss) {
         set({ stoppedReels: stopped, phase: 'idle', message: `Almost! 2 skills for ${r.nearMiss.candidate.name}. One more spin?` })
       } else {
@@ -637,21 +634,26 @@ export const useGame = create<State>((set, get) => {
         return
       }
       if (g.status === 'won') {
-        const prize = bestCandidate(s.filtered, s.targets, new Set(s.excluded))
+        const r = s.result!
+        // Кандидаты по линиям этого спина ещё не разобраны — приз не должен их дублировать.
+        const prize = bestCandidate(s.filtered, s.targets, new Set([...s.excluded, ...r.wins.map((w) => w.candidate.id)]))
         if (prize) {
           set({ bonus: g, bonusPrize: null, message: `WIN! ${prize.candidate.name} — ${prize.matched.length} of ${s.targets.length} skills. Opening the card…` })
-          const r = s.result!
           const rarity = rarityFor(prize.matched.length) ?? 'common'
+          // Приз миниигры — первым, за ним кандидаты по линиям этого спина.
+          const wins: SpinResult['wins'] = [{ candidate: prize.candidate, matched: prize.matched, lineIds: [], cells: r.scatters, rarity, fromBonus: true }, ...r.wins]
+          const cellKeys = new Set<string>()
+          const winCells = [...r.scatters, ...r.winCells].filter((c) => !cellKeys.has(`${c.reel}:${c.row}`) && !!cellKeys.add(`${c.reel}:${c.row}`))
           const bonusResult: SpinResult = {
             ...r,
-            wins: [{ candidate: prize.candidate, matched: prize.matched, lineIds: [], cells: r.scatters, rarity }],
-            winCells: r.scatters,
-            winLines: [],
+            wins,
+            winCells,
+            winLines: r.winLines,
             winner: prize.candidate,
-            matched: [SCATTER],
-            rarity,
+            matched: [...new Set([SCATTER, ...r.matched])],
+            rarity: wins.reduce<Rarity>((best, w) => (RARITY_RANK[w.rarity] > RARITY_RANK[best] ? w.rarity : best), 'common'),
             nearMiss: null,
-            fromBonus: true,
+            fromBonus: !r.wins.length,
           }
           clearTimeout(finishTimer)
           finishTimer = setTimeout(() => {
@@ -683,6 +685,7 @@ export const useGame = create<State>((set, get) => {
       const result = s.bonusPrize
       if (s.bonus.status === 'won' && result) {
         const w = result.wins[0]
+        const more = result.wins.length - 1
         set({
           result,
           phase: 'win',
@@ -693,8 +696,13 @@ export const useGame = create<State>((set, get) => {
           bonusPrize: null,
           upgradeApplied: {},
           stats: { ...s.stats, wins: s.stats.wins + 1 },
-          message: `Golden Folder: ${w.candidate.name} ×${w.matched.length}! SPIN — exchange for +${payoutFor(w.matched.length, s.winScale)} ◎`,
+          message: more
+            ? `Golden Folder: ${w.candidate.name} ×${w.matched.length}! Then ${more} more from the lines. SPIN — exchange all for +${result.wins.reduce((a, ww) => a + payoutFor(ww.matched.length, s.winScale), 0)} ◎`
+            : `Golden Folder: ${w.candidate.name} ×${w.matched.length}! SPIN — exchange for +${payoutFor(w.matched.length, s.winScale)} ◎`,
         })
+      } else if (s.result?.wins.length) {
+        // Бонус проигран, но по линиям выпали люди — теперь их можно смотреть.
+        set({ phase: 'win', winIndex: 0, winAt: performance.now(), winOpen: false, bonus: null, bonusPrize: null, upgradeApplied: {}, message: `Bonus over. ${winsText(s.result, s.winScale)}` })
       } else set({ phase: 'idle', bonus: null, bonusPrize: null, message: 'Bonus over. Keep spinning!' })
       persist()
     },

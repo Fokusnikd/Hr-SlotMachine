@@ -42,7 +42,7 @@ export function WinModal() {
   return (
     <Modal className={`win win--${win.rarity}`} onClose={closeWin}>
       <div className="win__banner">
-        {result!.fromBonus && 'Golden Folder · '}
+        {win.fromBonus && 'Golden Folder · '}
         {rarityLabel(win.rarity, win.matched.length)}
         {total > 1 && <span className="win__count"> · {winIndex + 1} of {total}</span>}
       </div>

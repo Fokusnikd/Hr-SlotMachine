@@ -6,7 +6,10 @@ import { Shortlist } from './ui/Shortlist'
 import { Settings } from './ui/Settings'
 import { PrivacyLink } from './ui/Privacy'
 import { useGame } from './game/store'
-import { sfx } from './audio/sfx'
+import { music, sfx } from './audio/sfx'
+import { HIRES_TO_WIN, REJECTS_TO_LOSE } from './game/bonus'
+
+const bonusPlaying = (s: ReturnType<typeof useGame.getState>) => s.phase === 'bonus' && s.bonus?.status === 'play'
 
 export default function App() {
   const [shortlistOpen, setShortlistOpen] = useState(false)
@@ -17,7 +20,11 @@ export default function App() {
     void useGame.getState().init()
   }, [])
 
-  useEffect(() => sfx.setEnabled(sound), [sound])
+  useEffect(() => {
+    sfx.setEnabled(sound)
+    // Звук включили посреди бонуса — музыка подхватывается.
+    if (sound && bonusPlaying(useGame.getState())) music.start()
+  }, [sound])
 
   // Звуки результата
   useEffect(
@@ -26,6 +33,12 @@ export default function App() {
         if (s.phase === 'win' && prev.phase !== 'win' && s.result?.rarity) sfx.win(s.result.rarity)
         if (s.phase === 'idle' && prev.phase === 'spinning' && s.result?.nearMiss) sfx.nearMiss()
         if (s.stats.exchanged > prev.stats.exchanged) sfx.coins(12)
+        // Музыка бонуса: играет, пока идёт партия; на исходе — затухает под фанфары/утешение.
+        const on = bonusPlaying(s)
+        if (on && !bonusPlaying(prev)) music.start()
+        if (!on && bonusPlaying(prev)) music.stop(s.bonus && s.bonus.status !== 'play' ? 0.35 : 0.8)
+        if (on && s.bonus !== prev.bonus && s.bonus)
+          music.setIntensity(s.bonus.hires >= HIRES_TO_WIN - 1 || s.bonus.rejects >= REJECTS_TO_LOSE - 1 ? 1 : 0)
       }),
     [],
   )

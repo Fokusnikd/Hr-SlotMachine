@@ -40,6 +40,8 @@ export interface SpinResult {
     lineIds: number[]
     cells: { reel: number; row: number }[]
     rarity: Rarity
+    /** Кандидат — приз миниигры «Золотая папка», а не выигрыш по линиям. */
+    fromBonus?: boolean
   }[]
   /** Клетки и линии всех выигрышей (объединение). */
   winCells: { reel: number; row: number }[]
@@ -52,7 +54,7 @@ export interface SpinResult {
   scatters: { reel: number; row: number }[]
   /** Число папок, если их 3+ (запуск миниигры), иначе 0. */
   bonus: number
-  /** Результат собран из приза миниигры, а не из линий. */
+  /** Результат собран только из приза миниигры (по линиям никого). */
   fromBonus?: boolean
   /** Лучший «почти» кандидат, если совпало 2 навыка. */
   nearMiss: { candidate: Candidate; matched: SkillId[] } | null
