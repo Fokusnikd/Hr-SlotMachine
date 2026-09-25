@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs'
 import { buildField, spinField, topSkills } from '../src/game/outcome'
 import type { Candidate } from '../src/game/types'
 import { bonusChance, payScaleTable } from '../src/game/calibrate'
-import { CONSOLATION_SPINS, winChance } from '../src/game/bonus'
+import { winChance } from '../src/game/bonus'
 import { payoutFor, scaleForLines, spinCost } from '../src/game/economy'
 
 const db = JSON.parse(readFileSync('public/data/candidates.json', 'utf8'))
@@ -38,7 +38,7 @@ for (const [name, cands, targets] of configs) {
       for (const w of r.wins) byM[w.matched.length] = (byM[w.matched.length] ?? 0) + 1
       if (r.bonus) {
         bonuses++
-        const gain = Math.random() < winChance(r.bonus) ? payoutFor(Math.max(3, field.bestMatch), scaleForLines(table, lines)) : CONSOLATION_SPINS * spinCost(lines)
+        const gain = Math.random() < winChance(r.bonus) ? payoutFor(Math.max(3, field.bestMatch), scaleForLines(table, lines)) : 0 // проигрыш миниигры — без утешения
         paid += gain
         bonusPaid += gain
       }

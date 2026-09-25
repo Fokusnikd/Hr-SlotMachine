@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGame } from '../game/store'
-import { BOARD_SIZE, type BonusGame } from '../game/bonus'
+import { BOARD_SIZE, REJECTS_TO_LOSE, type BonusGame } from '../game/bonus'
 import { folderBackTexture, folderFrontTexture } from './textures'
 import { CLIP, ROW_H, useLayoutVersion, WIN_W } from './layout'
 import { sfx } from '../audio/sfx'
@@ -64,6 +64,8 @@ export function BonusBoard() {
           bonus.board.forEach((f, i) => f === 'hire' && bonus.openedAt[i] >= 0 && sparkBus.emit(folderX(i), folderY(i), 0.5, '#ffd84a', 26, 1.5))
         }, 350)
       }
+      // Проигрыш — только по трём «Мимо» (статус lost бывает и у выигрыша без приза: пул исчерпан).
+      if (bonus.status === 'lost' && bonus.rejects >= REJECTS_TO_LOSE) setTimeout(() => sfx.bonusLose(), 450)
     }
   }, [bonus])
 

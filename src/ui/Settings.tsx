@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { parseFilter, playable, resolveLines, resolveSkills, defaultSkills, roleSkillsFor, useGame, type SourceFilter } from '../game/store'
-import { activeCells, cellKey, combosFor, linesFor, MAX_LINES, MAX_SKILLS, minLinesFor, MIN_SKILLS, REELS, ROWS } from '../game/outcome'
-import { LINE_BET, payoutFor, plural, scaleForLines, spinCost } from '../game/economy'
+import { MAX_SKILLS, MIN_SKILLS } from '../game/outcome'
+import { LINE_BET, plural } from '../game/economy'
+import { BONUS_MIN, HIRES_TO_WIN, REJECTS_TO_LOSE } from '../game/bonus'
+import { GUIDE } from '../copy'
 import { getSkill } from '../game/skills'
 import { assignFx, fxLabel } from '../game/fx'
 import { Modal } from './common'
@@ -27,49 +29,27 @@ const SOURCES: { id: SourceFilter; label: string }[] = [
   { id: 'github', label: 'GitHub' },
 ]
 
-const CW = 22
-const CH = 14
-const GAP = 4
-const cx = (reel: number) => reel * (CW + GAP) + CW / 2
-const cy = (row: number) => row * (CH + GAP) + CH / 2
-
-/** Мини-схема барабанов: активные линии и клетки самого большого комбо. */
-function LinesPreview({ count }: { count: number }) {
-  const lines = linesFor(count)
-  const active = new Set(activeCells(lines).map(cellKey))
-  const combo = new Set(combosFor(lines)[0].cells.map(cellKey))
-  const W = REELS * (CW + GAP) - GAP
-  const H = ROWS * (CH + GAP) - GAP
+/** Короткий гайд: барабаны, миниигра «Золотая папка», колесо торга. */
+function Guide() {
+  const sections = GUIDE.sections({ lineBet: LINE_BET, bonusMin: BONUS_MIN, hires: HIRES_TO_WIN, rejects: REJECTS_TO_LOSE })
   return (
-    <svg className="lines-preview" width={W} height={H} viewBox={`0 0 ${W} ${H}`} aria-hidden>
-      {Array.from({ length: ROWS }, (_, row) =>
-        Array.from({ length: REELS }, (_, reel) => {
-          const k = cellKey({ reel, row })
-          return (
-            <rect
-              key={k}
-              x={reel * (CW + GAP)}
-              y={row * (CH + GAP)}
-              width={CW}
-              height={CH}
-              rx={3}
-              className={combo.has(k) ? 'cell cell--combo' : active.has(k) ? 'cell cell--on' : 'cell'}
-            />
-          )
-        }),
-      )}
-      {lines.map((l) => (
-        <polyline
-          key={l.id}
-          points={l.rows.map((row, reel) => `${cx(reel)},${cy(row)}`).join(' ')}
-          fill="none"
-          stroke={l.color}
-          strokeWidth={2.2}
-          strokeLinejoin="round"
-          opacity={0.9}
-        />
-      ))}
-    </svg>
+    <div className="guide">
+      <span className="field__label">{GUIDE.title}</span>
+      <div className="guide__grid">
+        {sections.map((sec) => (
+          <section key={sec.title} className="guide__card">
+            <h3>
+              <span aria-hidden="true">{sec.icon}</span> {sec.title}
+            </h3>
+            <ul>
+              {sec.points.map((pt) => (
+                <li key={pt}>{pt}</li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -103,7 +83,6 @@ export function Settings({ onClose }: { onClose: () => void }) {
   const [source, setSource] = useState<SourceFilter>(settings.source)
   const [filter, setFilter] = useState(settings.filter)
   const [picked, setPicked] = useState<SkillId[]>(settings.skills)
-  const [lineWish, setLineWish] = useState(settings.lines)
 
   const role = useMemo(() => roleSkillsFor(all, { source, filter }), [all, source, filter])
   // Анимации навыков раздаются по позиции — та же раздача, что будет в игре.
@@ -113,12 +92,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
   const selected = new Set(skills)
   const matches = useMemo(() => playable(all, { source, filter }, skills).length, [all, source, filter, skills])
   const terms = parseFilter(filter)
-  const minLines = minLinesFor(skills.length)
-  const lineCount = resolveLines(lineWish, skills.length)
-  const payTable = useGame((s) => s.payTable)
-  const applied = useGame((s) => s.targets)
-  const sameSkills = applied.join() === skills.join() && source === settings.source && filter === settings.filter
-  const cost = spinCost(lineCount)
+  const lineCount = resolveLines(settings.lines, skills.length)
 
   const choosePreset = (f: string) => {
     setFilter(f)
@@ -208,53 +182,13 @@ export function Settings({ onClose }: { onClose: () => void }) {
         ) : (
           <span className="hint">No candidates match this filter — there are no skills to choose from.</span>
         )}
-        <div className="lines-info">
-          <LinesPreview count={lineCount} />
-          <div className="lines-info__text">
-            <div className="line-stepper">
-              <span>Lines</span>
-              <button className="icon-btn icon-btn--sm" onClick={() => setLineWish(lineCount - 1)} disabled={lineCount <= minLines} aria-label="Fewer lines">
-                −
-              </button>
-              <b className="line-stepper__value">{lineCount}</b>
-              <button className="icon-btn icon-btn--sm" onClick={() => setLineWish(lineCount + 1)} disabled={lineCount >= MAX_LINES} aria-label="More lines">
-                +
-              </button>
-              <span className="muted small">
-                min. {minLines} · spin {cost} ◎
-              </span>
-            </div>
-            <input
-              type="range"
-              className="line-range"
-              min={1}
-              max={MAX_LINES}
-              value={lineCount}
-              onChange={(e) => setLineWish(Number(e.target.value))}
-              aria-label="Number of lines"
-            />
-            <span className="small">
-              {sameSkills ? (
-                <>
-                  Payout per person: ×3 = +{payoutFor(3, scaleForLines(payTable, lineCount))} ◎, ×4 = +{payoutFor(4, scaleForLines(payTable, lineCount))} ◎, ×5 = +{payoutFor(5, scaleForLines(payTable, lineCount))} ◎
-                </>
-              ) : (
-                'Payouts recalculate for the new skills after "Apply"'
-              )}
-            </span>
-            <span className="hint">
-              The reels are fair: every cell lands at random, and common skills (like React) come up more often than rare ones. Lines
-              activate in order, at a cost of {LINE_BET} ◎ per line. Skills add up on lines that cross at a cell with a matched skill; repeats
-              count once. Several people can appear per spin: once a match is made its lines are used up, and the next match is searched for on
-              the rest — so every extra line is a chance at another person. Payouts are tuned to the skills: rare ones pay more.
-            </span>
-          </div>
-        </div>
         <span className={`match-count ${matches < 10 ? 'match-count--low' : ''}`}>
           Matches: <b>{matches.toLocaleString('en-US')}</b> <span className="muted small">(has 3+ selected skills)</span>{' '}
           {matches < 10 && '— too few to play, loosen the filter or pick different skills'}
         </span>
       </div>
+
+      <Guide />
 
       <label className="field field--row">
         <input type="checkbox" checked={settings.sound} onChange={(e) => update({ sound: e.target.checked })} />

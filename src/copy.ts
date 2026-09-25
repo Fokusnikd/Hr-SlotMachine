@@ -192,11 +192,49 @@ export const SHORTLIST = {
 
 /** Окно «Пополнить» — кредиты кончились. Служебное, варианты не нужны. */
 export const TOPUP = {
-  title: '💸 Out of budget',
+  title: 'Out of budget!',
   text: (cost: number, credits: number) => `A spin costs ${cost} ◎, and you've got ${credits} ◎ left. HRD can approve a top-up — or cut the paylines in Settings.`,
   button: (n: number) => `Top up +${n} ◎`,
   later: 'Not now',
+  left: 'left',
+  perSpin: 'per spin',
 } as const
+
+// ---------- Гайд в настройках ----------
+
+export const GUIDE = {
+  title: 'How to play',
+  sections: (n: { lineBet: number; bonusMin: number; hires: number; rejects: number }) => [
+    {
+      icon: '🎰',
+      title: 'Reels',
+      points: [
+        'Spin — skills land on the lines.',
+        '3+ skills of one candidate on crossing lines = a match.',
+        'Keep them ⭐ in the shortlist or exchange for ◎.',
+        `More lines — more people per spin, ${n.lineBet} ◎ per line.`,
+      ],
+    },
+    {
+      icon: '📁',
+      title: 'Golden Folder',
+      points: [
+        `${n.bonusMin}+ gold folders anywhere on the reels start the bonus.`,
+        `Open folders: ${n.hires} × Match — the best candidate in the pool is yours, ${n.rejects} × Miss — game over.`,
+        'Every extra gold folder is a shield against one Miss.',
+      ],
+    },
+    {
+      icon: '🎡',
+      title: 'Negotiation wheel',
+      points: [
+        'From a candidate card: try to trade up for a stronger match.',
+        'Green — +1 skill, take them or spin on. Yellow — free respin.',
+        'Red — the candidate walks and the whole chain is lost.',
+      ],
+    },
+  ],
+}
 
 // ---------- Табло сообщений ----------
 
