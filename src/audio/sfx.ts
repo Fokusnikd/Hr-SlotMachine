@@ -167,6 +167,15 @@ export const sfx = {
     const id = face === 'hire' ? 'folder-match' : face === 'reject' ? 'folder-miss' : face === 'shield' ? 'folder-shield' : 'folder-noshow'
     audio.play(id, { jitter: true })
   },
+  /** Миниигра «Золотая папка» проиграна (набралось 3 «Мимо»): грустная труба, как на колесе. */
+  bonusLose() {
+    audio.jingle('almost')
+  },
+  /** Открылось окно «Out of budget» — глухой сигнал, чтобы его заметили. */
+  broke() {
+    audio.play('line-limit')
+    audio.jingle('almost', { delay: 0.12 })
+  },
   /** Потолок колеса — финальная победа: фанфары. */
   wheelFinal(step: number) {
     audio.jingle('win-unicorn')

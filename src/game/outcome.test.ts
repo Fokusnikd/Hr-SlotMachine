@@ -1,3 +1,4 @@
+import { MAX_WINS_PER_SPIN } from './tuning'
 import { describe, expect, it } from 'vitest'
 import { activeCells, buildField, buildReelModel, spinField, buildSymbolPool, combosFor, evaluateGrid, evaluateLine, evaluateStructure, generateSpin, linesFor, MAX_LINES, minLinesFor, PAYLINES, REELS, ROWS, topSkills } from './outcome'
 import { makeMockCandidates } from '../data/mockCandidates'
@@ -132,7 +133,7 @@ describe('outcome', () => {
         }
         // На оставшихся линиях никто из пула больше не собирает 3+.
         const rest = r.lines.filter((l) => !usedLines.has(l.id))
-        if (r.wins.length < 10) expect(evaluateStructure(r.grid, rest, tset, candidates, people).winner).toBeNull()
+        if (r.wins.length < MAX_WINS_PER_SPIN) expect(evaluateStructure(r.grid, rest, tset, candidates, people).winner).toBeNull()
       }
     })
   }

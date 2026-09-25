@@ -84,12 +84,12 @@ describe('bonus: scatter on the reels', () => {
     expect(m.probs[m.symbols.indexOf(SCATTER)] / total).toBeCloseTo(SCATTER_P, 6)
   })
 
-  it('bonus triggers roughly once per 5–7 spins and matches the binomial', () => {
-    // SCATTER_P поднят до 0,095 (решение от 23.09) — бонус специально не редкий, ≈ раз в 6 спинов.
+  it('bonus frequency follows SCATTER_P and matches the binomial', () => {
+    // SCATTER_P = 0,052 (tuning.ts, решение от 25.09) — миниигра ≈ раз в 25 спинов.
     const field = buildField(candidates, targets, roleIds)
     const exact = bonusChance(field)
-    expect(1 / exact).toBeGreaterThan(5)
-    expect(1 / exact).toBeLessThan(7)
+    expect(1 / exact).toBeGreaterThan(20)
+    expect(1 / exact).toBeLessThan(30)
     const rng = seeded(5)
     let hits = 0
     let scatters = 0
@@ -101,8 +101,8 @@ describe('bonus: scatter on the reels', () => {
       expect(r.bonus === 0 || r.bonus === r.scatters.length).toBe(true)
     }
     expect(Math.abs(hits / N - exact)).toBeLessThan(0.004)
-    // ≈ 1,4 папки на экране за спин при SCATTER_P=0,095 — видно почти на каждом спине.
-    expect(scatters / N).toBeGreaterThan(1.2)
+    // В среднем SCATTER_P × 15 папок на экране за спин.
+    expect(scatters / N).toBeCloseTo(SCATTER_P * 15, 1)
   })
 
   it('scatter never takes part in skill wins', () => {

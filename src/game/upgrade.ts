@@ -24,19 +24,12 @@ import type { Candidate, SkillId } from './types'
  *
  *   звёзды: победа за ступень (7★ → 8★ = 20% и т.д.)
  */
-export const WIN_CHANCE: Record<number, number> = {
-  3: 77,
-  4: 65,
-  5: 47,
-  6: 28,
-  7: 18,
-  8: 9,
-  9: 6,
-  10: 4,
-}
+import { WHEEL_PUSH_SHARE, WHEEL_WIN_CHANCE } from './tuning'
+/** Значения — WHEEL_WIN_CHANCE в tuning.ts. */
+export const WIN_CHANCE: Record<number, number> = WHEEL_WIN_CHANCE
 
 /** Доля круга под жёлтыми секторами «Торгуется» (бесплатный респин). */
-export const PUSH_SHARE = 0.1
+export const PUSH_SHARE = WHEEL_PUSH_SHARE
 /** Максимум секторов на колесе и сколько из них жёлтых (стоят напротив друг друга). */
 export const SECTORS = 20
 export const PUSH_SECTORS = 2

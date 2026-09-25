@@ -13,15 +13,9 @@ import type { Rng } from './outcome'
  *    уже выпадавшие пропускаются). Проигрыш — утешительные кредиты.
  */
 
-export const BONUS_MIN = 3
-export const BOARD_SIZE = 12
-export const BOARD_HIRES = 5
-export const BOARD_REJECTS = 5
-export const HIRES_TO_WIN = 3
-export const REJECTS_TO_LOSE = 3
-export const MAX_SHIELDS = 2
-/** Утешительный приз при проигрыше миниигры — в ставках спина. */
-export const CONSOLATION_SPINS = 5
+// Параметры доски и щитов — в tuning.ts.
+import { BOARD_HIRES, BOARD_REJECTS, BOARD_SIZE, BONUS_MIN, HIRES_TO_WIN, MAX_SHIELDS, REJECTS_TO_LOSE } from './tuning'
+export { BOARD_HIRES, BOARD_REJECTS, BOARD_SIZE, BONUS_MIN, CONSOLATION_SPINS, HIRES_TO_WIN, MAX_SHIELDS, REJECTS_TO_LOSE } from './tuning'
 
 export type Folder = 'hire' | 'reject' | 'empty'
 

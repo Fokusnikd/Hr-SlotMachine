@@ -1,28 +1,15 @@
 import type { Rarity } from "./types";
 import { RARITY_NAME } from "../copy";
 
-export const START_CREDITS = 1000;
-/** Ставка за одну линию выплат. Спин стоит LINE_BET × число линий. */
-export const LINE_BET = 20;
-export const REFILL_AMOUNT = 1000;
+import { LINE_BET, PAY_MULT, TARGET_RTP } from "./tuning";
+// Значения баланса — в tuning.ts.
+export { START_CREDITS, LINE_BET, REFILL_AMOUNT, TARGET_RTP } from "./tuning";
 
 export const spinCost = (lineCount: number) =>
   LINE_BET * Math.max(1, lineCount);
 
-/** Множитель ставки линии по числу совпавших навыков. */
-const MULT: Record<number, number> = {
-  3: 2.5,
-  4: 5,
-  5: 10,
-  6: 12,
-  7: 15,
-  8: 18,
-  9: 22,
-  10: 26,
-};
+const MULT = PAY_MULT;
 
-/** Целевая отдача: сколько кредитов в среднем возвращается с каждого поставленного. */
-export const TARGET_RTP = 0.95;
 /** На этих числах линий масштаб выплат калибруется симуляцией; между ними — интерполяция. */
 export const CALIBRATION_LINES = [1, 4, 9, 15, 25];
 

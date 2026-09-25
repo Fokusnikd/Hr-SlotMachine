@@ -1,4 +1,7 @@
 import type { Candidate, Rarity, SkillId, SpinResult } from "./types";
+import { MAX_WINS_PER_SPIN, SCATTER_P, TARGET_SHARE, TARGET_SHARE_6PLUS } from "./tuning";
+
+export { SCATTER_P } from "./tuning";
 
 export const REELS = 5;
 /** Видимые ряды: 0 — верхний, 1 — средний (основная линия), 2 — нижний. */
@@ -15,11 +18,7 @@ export type Rng = () => number;
 
 /** Бонусный символ «Золотая папка» (scatter). Не навык: не участвует в линиях и сетях. */
 export const SCATTER: SkillId = "__hire";
-/**
- * Вероятность scatter в клетке. Берётся из доли «пустышек», выбранные навыки выпадают как раньше.
- * 3,5 % → 3+ папки на 15 клетках ≈ 1,4 % спинов (≈ 1 бонус на 70 спинов).
- */
-export const SCATTER_P = 0.095;
+/** Вероятность scatter в клетке — SCATTER_P в tuning.ts. */
 export const BONUS_MIN_SCATTERS = 3;
 
 const pick = <T>(arr: readonly T[], rng: Rng): T =>
@@ -462,10 +461,9 @@ export interface ReelModel {
 
 /** Доля клеток с выбранными навыками. Подобрано симуляцией (scripts/sim.ts). */
 export function targetShareFor(targetCount: number): number {
-  // Мало навыков — у кандидата нужны почти все, поэтому выбранные выпадают чаще.
-  // Цель: на 1 линии выигрыш ≈ 8–10 % спинов, дальше растёт с числом линий.
-  const table: Record<number, number> = { 3: 0.4, 4: 0.34, 5: 0.3 };
-  return table[targetCount] ?? Math.max(0.22, 0.3 - 0.01 * (targetCount - 5));
+  // Мало навыков — у кандидата нужны почти все, поэтому выбранные выпадают чаще. Значения — tuning.ts.
+  const { base, step, min } = TARGET_SHARE_6PLUS;
+  return TARGET_SHARE[targetCount] ?? Math.max(min, base - step * (targetCount - 5));
 }
 
 export function buildReelModel(
@@ -566,7 +564,7 @@ export function evaluateWins(
   groups: SkillGroup[],
   exclude: ReadonlySet<string> = new Set(),
   rng: Rng = Math.random,
-  maxWins = 10,
+  maxWins = MAX_WINS_PER_SPIN,
 ): WinsEvaluation {
   let free = lines;
   const taken = new Set<string>(exclude);
