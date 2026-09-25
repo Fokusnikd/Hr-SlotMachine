@@ -33,7 +33,7 @@ export const SOUNDS = {
   'folder-miss': { file: 'folder-miss', bus: 'sfx' }, // Папка: Отказ (JapanYoshiTheGamer, 8-bit Wrong Sound), 0.6 с
   'folder-noshow': { file: 'folder-noshow', bus: 'sfx' }, // Папка: Пустая (magnuswaker, Boing 2), 1.0 с
   'folder-shield': { file: 'folder-shield', bus: 'sfx' }, // Папка: Защита (egomassive, Clang), 0.6 с
-  'wheel-music': { file: 'wheel-music', bus: 'music', loop: true }, // Музыка колеса (portwain, quiz game music loop BPM 90), 16 с
+  'wheel-music': { file: 'wheel-music', bus: 'music', loop: true }, // Музыка колеса (envirOmaniac2, HappyLoop), 13.8 с
   'wheel-win': { file: 'wheel-win', bus: 'sfx' }, // Победа на колесе (Fupicat, WinBrass), 2.1 с
   drumroll: { file: 'drumroll', bus: 'sfx' }, // Барабанная дробь, 6.0 с — пока не подключена, отложена
   'wheel-respin': { file: 'wheel-respin', bus: 'sfx' }, // Жёлтый — респин, 1.91 с
