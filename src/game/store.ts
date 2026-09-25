@@ -88,6 +88,8 @@ interface State {
   linesChangedAt: number
   /** Автозапуск: крутит сам, пока не выпадет кандидат или не кончатся кредиты. */
   auto: boolean
+  /** Счётчик попыток спина без денег — UI открывает по нему окно «Пополнить». */
+  brokeAttempts: number
   /** Анимация каждого навыка позиции (раздаётся при выборе «кого ищем»). */
   skillFx: Record<SkillId, FxId>
   /** Когда (performance.now) выпал текущий выигрыш — отсчёт анимаций слотов. */
@@ -126,7 +128,8 @@ interface State {
   reelStopped: (index: number) => void
   exchange: () => void
   keep: () => void
-  refill: () => void
+  /** Пополнить кредиты (по умолчанию на REFILL_AMOUNT). */
+  refill: (amount?: number) => void
   removeFromShortlist: (id: string) => void
   updateSettings: (patch: Partial<Settings>) => void
   /** Добавить (+1) или убрать (−1) линию прямо с экрана машины. */
@@ -491,6 +494,7 @@ export const useGame = create<State>((set, get) => {
     cost: spinCost(1),
     linesChangedAt: -1e9,
     auto: false,
+    brokeAttempts: 0,
     winOpen: false,
     skillFx: {},
     winAt: 0,
@@ -568,7 +572,7 @@ export const useGame = create<State>((set, get) => {
       }
       if (s.phase !== 'idle') return false
       if (s.credits < s.cost) {
-        set({ auto: false, message: say(MSG.outOfCredits) })
+        set({ auto: false, brokeAttempts: s.brokeAttempts + 1, message: say(MSG.outOfCredits) })
         return false
       }
       if (!s.poolInfo.eligible) {
@@ -659,8 +663,8 @@ export const useGame = create<State>((set, get) => {
       advance(say(MSG.keep, w.candidate.name))
       persist()
     },
-    refill: () => {
-      set((s) => ({ credits: s.credits + REFILL_AMOUNT, message: say(MSG.refill, REFILL_AMOUNT) }))
+    refill: (amount = REFILL_AMOUNT) => {
+      set((s) => ({ credits: s.credits + amount, message: say(MSG.refill, amount) }))
       persist()
     },
 
