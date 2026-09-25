@@ -417,16 +417,21 @@ button {
     0 0 50px color-mix(in srgb, var(--accent) 45%, transparent),
     0 30px 80px rgba(0, 0, 0, 0.6);
 }
+/* Один отступ на всё: поля карточки = отступ крестика сверху и справа. */
+.win {
+  --win-gap: 16px;
+  --win-close: 28px;
+}
 .win .modal__body {
-  padding-top: 0;
+  padding: 0 var(--win-gap) var(--win-gap);
 }
 /* У карточки сверху баннер — крестик поменьше и по центру баннера, внутри рамки. */
 .win .modal__close {
-  top: 5px;
-  right: 10px;
-  width: 32px;
-  height: 32px;
-  font-size: 15px;
+  top: var(--win-gap);
+  right: var(--win-gap);
+  width: var(--win-close);
+  height: var(--win-close);
+  font-size: 14px;
 }
 .win--rare {
   --accent: #b36bff;
@@ -435,9 +440,18 @@ button {
   --accent: var(--gold);
 }
 .win__banner {
-  margin: 0 -26px 20px;
-  /* по бокам — место под крестик */
-  padding: 10px 60px;
+  margin: 0 calc(-1 * var(--win-gap)) var(--win-gap);
+  /* Одна строка по центру карточки: слева и справа одинаковое место под крестик,
+     а лишний хвост letter-spacing после последней буквы компенсирован слева. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  /* высота = отступ + крестик + отступ, по бокам — место под крестик с обеих сторон */
+  min-height: calc(var(--win-gap) * 2 + var(--win-close));
+  padding: 0 calc(var(--win-gap) * 2 + var(--win-close)) 0 calc(var(--win-gap) * 2 + var(--win-close) + 0.2em);
+  white-space: nowrap;
+  font-size: 14px;
   text-align: center;
   font-weight: 900;
   letter-spacing: 0.2em;
@@ -890,9 +904,27 @@ code {
   }
 }
 
+/* «1/11» — отдельная плашка, не переносится и не ломает строку баннера. */
 .win__count {
-  opacity: 0.75;
-  font-weight: 600;
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.win__rarity {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 520px) {
+  .win__banner {
+    letter-spacing: 0.1em;
+    font-size: 12px;
+  }
 }
 
 /* ---------- Privacy ---------- */
