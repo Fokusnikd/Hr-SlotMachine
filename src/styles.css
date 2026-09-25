@@ -366,18 +366,33 @@ button {
 }
 .modal {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: min(560px, 100%);
   max-height: calc(100vh - 32px);
-  overflow: auto;
+  max-height: calc(100dvh - 32px);
+  /* Прокручивается .modal__body, а само окно обрезает всё по скруглённой рамке —
+     крестик остаётся внутри и не уезжает при скролле. */
+  overflow: hidden;
   background: var(--panel-solid);
   border: 1px solid var(--line);
   border-radius: 20px;
-  padding: 26px;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
   animation: pop 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
 }
+.modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 26px;
+}
 .modal h2 {
   margin: 0 0 16px;
+}
+/* Заголовок не заезжает под крестик. */
+.modal__body > h2:first-child {
+  padding-right: 44px;
 }
 @keyframes pop {
   from {
@@ -387,8 +402,11 @@ button {
 }
 .modal__close {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  flex: none;
+  margin: 0;
 }
 
 /* ---------- Win card ---------- */
@@ -398,7 +416,22 @@ button {
   box-shadow:
     0 0 50px color-mix(in srgb, var(--accent) 45%, transparent),
     0 30px 80px rgba(0, 0, 0, 0.6);
-  padding-top: 0;
+}
+/* Один отступ на всё: поля карточки = отступ крестика сверху и справа. */
+.win {
+  --win-gap: 16px;
+  --win-close: 28px;
+}
+.win .modal__body {
+  padding: 0 var(--win-gap) var(--win-gap);
+}
+/* У карточки сверху баннер — крестик поменьше и по центру баннера, внутри рамки. */
+.win .modal__close {
+  top: var(--win-gap);
+  right: var(--win-gap);
+  width: var(--win-close);
+  height: var(--win-close);
+  font-size: 14px;
 }
 .win--rare {
   --accent: #b36bff;
@@ -407,8 +440,18 @@ button {
   --accent: var(--gold);
 }
 .win__banner {
-  margin: 0 -26px 20px;
-  padding: 10px;
+  margin: 0 calc(-1 * var(--win-gap)) var(--win-gap);
+  /* Одна строка по центру карточки: слева и справа одинаковое место под крестик,
+     а лишний хвост letter-spacing после последней буквы компенсирован слева. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  /* высота = отступ + крестик + отступ, по бокам — место под крестик с обеих сторон */
+  min-height: calc(var(--win-gap) * 2 + var(--win-close));
+  padding: 0 calc(var(--win-gap) * 2 + var(--win-close)) 0 calc(var(--win-gap) * 2 + var(--win-close) + 0.2em);
+  white-space: nowrap;
+  font-size: 14px;
   text-align: center;
   font-weight: 900;
   letter-spacing: 0.2em;
@@ -630,6 +673,37 @@ button {
 .spacer {
   flex: 1;
 }
+/* Настройки — 70% ширины экрана; на телефонах уже 70% мало — почти во всю ширину. */
+.modal.settings {
+  width: 70vw;
+  max-width: none;
+}
+@media (max-width: 600px) {
+  .modal.settings {
+    width: 100%;
+  }
+}
+
+/* ---------- Top up ---------- */
+.modal.topup {
+  width: min(420px, 100%);
+  text-align: center;
+}
+.modal.topup p {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 20px;
+}
+.modal.topup h2 {
+  padding-inline: 44px;
+}
+.topup__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
 
 /* ---------- Mobile ---------- */
 @media (max-width: 720px) {
@@ -830,9 +904,27 @@ code {
   }
 }
 
+/* «1/11» — отдельная плашка, не переносится и не ломает строку баннера. */
 .win__count {
-  opacity: 0.75;
-  font-weight: 600;
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.win__rarity {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 520px) {
+  .win__banner {
+    letter-spacing: 0.1em;
+    font-size: 12px;
+  }
 }
 
 /* ---------- Privacy ---------- */

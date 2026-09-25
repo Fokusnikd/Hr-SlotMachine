@@ -50,9 +50,15 @@ export function WinModal() {
   return (
     <Modal className={`win win--${win.rarity}`} onClose={closeWin}>
       <div className="win__banner">
-        {win.fromBonus && CARD.fromBonus}
-        {rarityLabel(win.rarity, win.matched.length)}
-        {total > 1 && <span className="win__count"> · {winIndex + 1} {CARD.of} {total}</span>}
+        <span className="win__rarity">
+          {win.fromBonus && CARD.fromBonus}
+          {rarityLabel(win.rarity, win.matched.length)}
+        </span>
+        {total > 1 && (
+          <span className="win__count" title={`${winIndex + 1} ${CARD.of} ${total}`}>
+            {winIndex + 1}/{total}
+          </span>
+        )}
       </div>
       <div className="win__head">
         <Avatar c={c} size={88} />

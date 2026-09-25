@@ -1,10 +1,11 @@
 import { useEffect } from 'react'
 import { Scene } from './scene/Scene'
-import { closeSettings, closeShortlist, useUi } from './ui/uiState'
+import { closeSettings, closeShortlist, closeTopUp, openTopUp, useUi } from './ui/uiState'
 import { WinModal } from './ui/WinModal'
 import { Shortlist } from './ui/Shortlist'
 import { Settings } from './ui/Settings'
 import { PrivacyLink } from './ui/Privacy'
+import { TopUp } from './ui/TopUp'
 import { useGame } from './game/store'
 import { music, sfx } from './audio/sfx'
 import { HIRES_TO_WIN, REJECTS_TO_LOSE } from './game/bonus'
@@ -16,6 +17,7 @@ const bonusPlaying = (s: ReturnType<typeof useGame.getState>) => s.phase === 'bo
 export default function App() {
   const shortlistOpen = useUi((s) => s.shortlistOpen)
   const settingsOpen = useUi((s) => s.settingsOpen)
+  const topUpOpen = useUi((s) => s.topUpOpen)
   const sound = useGame((s) => s.settings.sound)
   const masterVol = useGame((s) => s.settings.masterVol)
   const musicVol = useGame((s) => s.settings.musicVol)
@@ -62,12 +64,24 @@ export default function App() {
     [],
   )
 
+  // Кредиты кончились — окно «Пополнить». Открывается один раз: когда спин полностью разыгран
+  // (вернулись в idle из спина/бонуса/карточки), или при попытке крутить без денег.
+  // Закрыли без пополнения — снова откроется только на следующей попытке спина.
+  useEffect(
+    () =>
+      useGame.subscribe((s, prev) => {
+        const settled = s.phase === 'idle' && prev.phase !== 'idle'
+        if ((settled && s.credits < s.cost) || s.brokeAttempts > prev.brokeAttempts) openTopUp()
+      }),
+    [],
+  )
+
   // Пробел — крутить, +/− — линии
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement
       if (el.closest('input, textarea, [role="dialog"]')) return
-      if (shortlistOpen || settingsOpen || useGame.getState().winOpen) return
+      if (shortlistOpen || settingsOpen || topUpOpen || useGame.getState().winOpen) return
       // + / − — добавить или убрать линию
       if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') return pressLinesKey(1)
       if (e.key === '-' || e.code === 'NumpadSubtract') return pressLinesKey(-1)
@@ -80,7 +94,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [shortlistOpen, settingsOpen])
+  }, [shortlistOpen, settingsOpen, topUpOpen])
 
   return (
     <div className="app">
@@ -90,6 +104,7 @@ export default function App() {
       <WinModal />
       <Shortlist open={shortlistOpen} onClose={closeShortlist} />
       {settingsOpen && <Settings onClose={closeSettings} />}
+      {topUpOpen && <TopUp onClose={closeTopUp} />}
       <PrivacyLink />
     </div>
   )

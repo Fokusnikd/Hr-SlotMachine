@@ -190,6 +190,14 @@ export const SHORTLIST = {
   ],
 } as const
 
+/** Окно «Пополнить» — кредиты кончились. Служебное, варианты не нужны. */
+export const TOPUP = {
+  title: '💸 Out of budget',
+  text: (cost: number, credits: number) => `A spin costs ${cost} ◎, and you've got ${credits} ◎ left. HRD can approve a top-up — or cut the paylines in Settings.`,
+  button: (n: number) => `Top up +${n} ◎`,
+  later: 'Not now',
+} as const
+
 // ---------- Табло сообщений ----------
 
 type Grade = { from: number; to: number | null; odds: string }
