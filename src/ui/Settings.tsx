@@ -5,6 +5,7 @@ import { LINE_BET, payoutFor, plural, scaleForLines, spinCost } from '../game/ec
 import { getSkill } from '../game/skills'
 import { assignFx, fxLabel } from '../game/fx'
 import { Modal } from './common'
+import { sfx } from '../audio/sfx'
 import type { SkillId } from '../game/types'
 
 const PRESETS: { label: string; filter: string }[] = [
@@ -69,6 +70,27 @@ function LinesPreview({ count }: { count: number }) {
         />
       ))}
     </svg>
+  )
+}
+
+/** Ползунок громкости 0..100 %; `preview` — отпустили ползунок, звучит короткий пример. */
+function VolumeSlider({ label, value, onChange, preview }: { label: string; value: number; onChange: (v: number) => void; preview?: boolean }) {
+  const pct = Math.round(value * 100)
+  return (
+    <label className="volume__row">
+      <span>{label}</span>
+      <input
+        type="range"
+        min={0}
+        max={100}
+        value={pct}
+        onChange={(e) => onChange(Number(e.target.value) / 100)}
+        onPointerUp={preview ? () => sfx.button() : undefined}
+        onKeyUp={preview ? () => sfx.button() : undefined}
+        aria-label={`${label} volume`}
+      />
+      <span className="muted small volume__value">{pct}%</span>
+    </label>
   )
 }
 
@@ -238,6 +260,11 @@ export function Settings({ onClose }: { onClose: () => void }) {
         <input type="checkbox" checked={settings.sound} onChange={(e) => update({ sound: e.target.checked })} />
         <span>Sound</span>
       </label>
+      <div className={`field volume ${settings.sound ? '' : 'volume--muted'}`}>
+        <VolumeSlider label="Volume" value={settings.masterVol} onChange={(v) => update({ masterVol: v })} preview />
+        <VolumeSlider label="Music" value={settings.musicVol} onChange={(v) => update({ musicVol: v })} />
+        <VolumeSlider label="Effects" value={settings.sfxVol} onChange={(v) => update({ sfxVol: v })} preview />
+      </div>
       <label className="field field--row">
         <input type="checkbox" checked={settings.fx} onChange={(e) => update({ fx: e.target.checked })} />
         <span>Slot animations on win</span>

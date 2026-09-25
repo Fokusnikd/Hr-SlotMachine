@@ -150,7 +150,7 @@ export function UpgradeWheel() {
     if (!p || p.id !== upgrade.id) {
       flight.current = null
       setFlying(false)
-      sfx.whoosh()
+      sfx.wheelOpen()
       return
     }
     if (upgrade.status === 'spinning' && p.status !== 'spinning') {
@@ -161,7 +161,7 @@ export function UpgradeWheel() {
     const top = BOX_Y() - BOX_H() / 2
     if (upgrade.last === 'win') {
       pulse.current = 1
-      sfx.win(upgrade.status === 'max' ? 'legendary' : 'rare')
+      sfx.wheelWin(upgrade.step)
       sparkBus.emit(0, top, 0.5, '#5cff9a', upgrade.status === 'max' ? 40 : 24, 1.4)
       if (upgrade.status === 'max') setTimeout(() => sparkBus.emit(0, CY(), 0.5, '#ffd84a', 40, 1.8), 250)
       const won = wonFresh(upgrade).slice(0, FLY_MAX)
@@ -170,10 +170,10 @@ export function UpgradeWheel() {
         setFlying(true)
       }
     } else if (upgrade.last === 'push') {
-      sfx.ding(4)
+      sfx.wheelRespin()
       sparkBus.emit(0, top, 0.5, '#ffd84a', 12)
     } else {
-      sfx.nearMiss()
+      sfx.wheelLose()
       sparkBus.emit(0, top, 0.5, '#ff5a6a', 16)
     }
   }, [upgrade])
@@ -269,7 +269,7 @@ export function UpgradeWheel() {
       m.scale.setScalar(1 + Math.sin(p * Math.PI) * 0.25 - p * 0.25)
       if (lt >= FLY_DUR && f.landed <= i) {
         f.landed = i + 1
-        sfx.ding(4 + i * 2)
+        sfx.chipLanded(i)
         sparkBus.emit(toX, toY, 0.5, getSkill(f.skills[i]).color, 14, 1.1)
         if (f.landed >= n) {
           // Все долетели — табло показывает новые навыки с «+».
@@ -422,7 +422,7 @@ export function UpgradeWheel() {
           onClick={(e) => {
             if (!inPhase('upgrade')) return
             e.stopPropagation()
-            sfx.click()
+            sfx.button()
             b.act()
           }}
           {...hover(i)}

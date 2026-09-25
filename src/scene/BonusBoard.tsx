@@ -45,21 +45,17 @@ export function BonusBoard() {
     const p = prev.current
     prev.current = bonus
     if (!bonus) return
-    if (!p || p.board !== bonus.board) {
-      sfx.win('legendary')
-      return
-    }
+    // Вход в бонус озвучивают фанфары, стартовавшие ещё на барабанах (sfx.bonusFanfare).
+    if (!p || p.board !== bonus.board) return
     const opened = bonus.openedAt.findIndex((v, i) => v >= 0 && p.openedAt[i] < 0)
     if (opened >= 0) {
-      sfx.whoosh()
       const f = faceOf(bonus, opened)
       const color = f === 'hire' ? '#5cff9a' : f === 'reject' ? '#ff2d55' : f === 'shield' ? '#6ab4ff' : '#fff2c4'
+      // Один звук исхода — в момент, когда папка развернулась лицом.
       setTimeout(() => {
-        if (f === 'hire') sfx.ding(4 + bonus.hires * 2)
-        else if (f === 'reject') sfx.nearMiss()
-        else if (f === 'shield') sfx.ding(2)
+        sfx.folder(f)
         if (f !== 'empty') sparkBus.emit(folderX(opened), folderY(opened), 0.45, color, f === 'hire' ? 18 : 10)
-      }, 220)
+      }, 120)
     }
     if (bonus.status !== p.status) {
       if (bonus.status === 'won') {
@@ -67,7 +63,7 @@ export function BonusBoard() {
           sfx.win('legendary')
           bonus.board.forEach((f, i) => f === 'hire' && bonus.openedAt[i] >= 0 && sparkBus.emit(folderX(i), folderY(i), 0.5, '#ffd84a', 26, 1.5))
         }, 350)
-      } else if (bonus.status === 'lost') setTimeout(() => sfx.coins(10), 400)
+      }
     }
   }, [bonus])
 

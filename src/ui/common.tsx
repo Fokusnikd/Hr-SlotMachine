@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { sfx } from '../audio/sfx'
 import { getSkill } from '../game/skills'
 import type { Candidate, SkillId } from '../game/types'
 
@@ -31,8 +32,24 @@ export function SkillChip({ id, matched }: { id: SkillId; matched?: boolean }) {
 
 export function Modal({ children, onClose, className = '' }: { children: React.ReactNode; onClose?: () => void; className?: string }) {
   return (
-    <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-      <div className={`modal ${className}`} role="dialog" aria-modal="true">
+    <div
+      className="overlay"
+      onMouseDown={(e) => {
+        if (e.target !== e.currentTarget || !onClose) return
+        sfx.uiClick()
+        onClose()
+      }}
+    >
+      {/* Щелчок на любую кнопку/ссылку модалки; у кнопок со своим звуком — data-sfx. */}
+      <div
+        className={`modal ${className}`}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => {
+          const el = (e.target as HTMLElement).closest('button, a')
+          if (el && !el.hasAttribute('data-sfx') && !(el as HTMLButtonElement).disabled) sfx.uiClick()
+        }}
+      >
         {onClose && (
           <button className="icon-btn modal__close" onClick={onClose} aria-label="Close">
             ✕

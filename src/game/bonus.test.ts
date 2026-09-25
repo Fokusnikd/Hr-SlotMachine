@@ -115,7 +115,8 @@ describe('bonus: scatter on the reels', () => {
     const field = buildField(candidates, targets, roleIds)
     const b = bonusValue(field, 1)
     expect(b.mult).toBeGreaterThan(0)
-    expect(b.fixed).toBeGreaterThan(0)
+    // Утешительного приза за проигранный бонус нет — фиксированной части тоже.
+    expect(b.fixed).toBe(0)
     const table = payScaleTable(field)
     for (const v of Object.values(table)) expect(v).toBeGreaterThan(0.3)
   })

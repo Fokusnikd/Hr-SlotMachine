@@ -24,7 +24,7 @@ function spinResult(withLineWin: boolean): SpinResult {
     grid: [],
     line: [],
     cells: [],
-    lines: [{ id: 1, color: '#fff', rows: [1, 1, 1, 1, 1] }],
+    lines: [{ id: 1, color: '#fff', rows: [1, 1, 1, 1, 1], note: 0 }],
     wins,
     winCells: wins.flatMap((w) => w.cells),
     winLines: withLineWin ? [1] : [],

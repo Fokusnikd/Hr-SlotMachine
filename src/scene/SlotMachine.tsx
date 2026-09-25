@@ -42,6 +42,19 @@ const RED = '#ff2d55'
 /** Пресеты числа линий на клавишах панели. */
 export const LINE_PRESETS = [1, 4, 9, 15, 25]
 
+/**
+ * Клавиша ± линий (на панели или на клавиатуре): щелчок кнопки и смена числа линий — нота новой
+ * последней линии прозвучит сама (App). Если дальше некуда — вместо щелчка звук упора.
+ */
+export function pressLinesKey(delta: 1 | -1) {
+  const s = useGame.getState()
+  const idle = s.phase !== 'spinning' && s.phase !== 'bonus' && s.phase !== 'upgrade'
+  const atBound = delta > 0 ? s.lines.length >= MAX_LINES : s.lines.length <= minLinesFor(s.targets.length)
+  if (idle && atBound) sfx.lineLimit()
+  else sfx.button()
+  s.changeLines(delta)
+}
+
 function useHoverCursor() {
   return {
     onPointerOver: () => (document.body.style.cursor = 'pointer'),
@@ -220,7 +233,7 @@ function OpenButton({ x }: { x: number }) {
       onClick={(e) => {
         e.stopPropagation()
         pressed.current = 1
-        sfx.click()
+        sfx.uiClick()
         openWin()
       }}
       {...hover}
@@ -464,11 +477,17 @@ function CreditsDisplay({ x, w }: { x: number; w: number }) {
   const disp = useMemo(() => makeCreditsDisplay(Math.round(w * DISPLAY_PPU), Math.round(h * DISPLAY_PPU)), [w, h])
   const shown = useRef(useGame.getState().credits)
   const drawn = useRef('')
+  /** Идёт докрутка вверх — «касса» звучит один раз на её старте. */
+  const rolling = useRef(false)
   const hover = useHoverCursor()
   useFrame(({ clock }, dt) => {
     const { credits, cost, phase } = useGame.getState()
     const broke = credits < cost && phase === 'idle'
     const d = credits - shown.current
+    if (d >= 1 && !rolling.current) {
+      rolling.current = true
+      sfx.credits()
+    } else if (d < 1) rolling.current = false
     shown.current = Math.abs(d) < 1 ? credits : shown.current + d * (1 - Math.exp(-dt * 8))
     const value = Math.round(shown.current)
     const blink = broke && Math.floor(clock.elapsedTime * 2.5) % 2 === 0
@@ -487,7 +506,7 @@ function CreditsDisplay({ x, w }: { x: number; w: number }) {
         const { credits, cost, phase, refill } = useGame.getState()
         if (!(credits < cost && phase === 'idle')) return
         e.stopPropagation()
-        sfx.click()
+        sfx.cash()
         refill()
       }}
       {...hover}
@@ -520,7 +539,7 @@ function SignKey({ x, w, h, label, onPress }: { x: number; w: number; h: number;
       onClick={(e) => {
         e.stopPropagation()
         pressed.current = 1
-        sfx.click()
+        sfx.uiClick()
         onPress()
       }}
       onPointerOver={() => {
@@ -638,6 +657,7 @@ function RoundButton({
   onPress,
   enabled,
   pulse = false,
+  silent = false,
 }: {
   position: [number, number, number]
   radius: number
@@ -646,6 +666,8 @@ function RoundButton({
   onPress: () => void
   enabled: () => boolean
   pulse?: boolean
+  /** Без щелчка кнопки (у SPIN свой звук — рычаг). */
+  silent?: boolean
 }) {
   const group = useRef<THREE.Group>(null!)
   const cap = useRef<THREE.MeshStandardMaterial>(null!)
@@ -672,7 +694,7 @@ function RoundButton({
       onClick={(e) => {
         e.stopPropagation()
         pressed.current = 1
-        sfx.click()
+        if (!silent) sfx.button()
         onPress()
       }}
       {...hover}
@@ -745,11 +767,14 @@ function Key({
       position={[position[0], position[1] + 0.1, position[2]]}
       onClick={(e) => {
         e.stopPropagation()
+        // Неактивную клавишу нажать нельзя: ни звука, ни движения.
+        if (state() === 'disabled') return
         pressed.current = 1
-        sfx.click()
+        sfx.button()
         onPress()
       }}
-      {...hover}
+      onPointerOver={() => (document.body.style.cursor = state() === 'disabled' ? '' : 'pointer')}
+      onPointerOut={hover.onPointerOut}
     >
       <RoundedBox args={[w, 0.1, d]} radius={0.03}>
         <meshStandardMaterial color="#1a0b28" metalness={0.4} roughness={0.4} />
@@ -804,7 +829,6 @@ function ControlDeck() {
   const L = deckLayout(compact)
   const spin = useGame((s) => s.spin)
   const setLines = useGame((s) => s.setLines)
-  const changeLines = useGame((s) => s.changeLines)
   const toggleAuto = useGame((s) => s.toggleAuto)
   const st = () => useGame.getState()
   const idleish = () => st().phase !== 'spinning'
@@ -841,24 +865,27 @@ function ControlDeck() {
               if (s.lines.length === n) return 'on'
               return n < minLinesFor(s.targets.length) || !idleish() ? 'disabled' : 'off'
             }}
-            onPress={() => setLines(n)}
+            // Уже выбранный пресет — только нажатие и щелчок, без действия.
+            onPress={() => st().lines.length !== n && setLines(n)}
           />
         ))}
         <RoundButton
           position={[L.minus.x, 0, L.minus.z]}
           radius={L.minus.r}
           label={TEXT.minus}
-          onPress={() => changeLines(-1)}
+          silent
+          onPress={() => pressLinesKey(-1)}
           enabled={() => idleish() && st().lines.length > minLinesFor(st().targets.length)}
         />
         <RoundButton
           position={[L.plus.x, 0, L.plus.z]}
           radius={L.plus.r}
           label={TEXT.plus}
-          onPress={() => changeLines(1)}
+          silent
+          onPress={() => pressLinesKey(1)}
           enabled={() => idleish() && st().lines.length < MAX_LINES}
         />
-        <RoundButton position={[L.spin.x, 0, L.spin.z]} radius={L.spin.r} label={TEXT.spin} pulse onPress={spin} enabled={() => st().phase !== 'spinning' && !st().auto} />
+        <RoundButton position={[L.spin.x, 0, L.spin.z]} radius={L.spin.r} label={TEXT.spin} pulse silent onPress={spin} enabled={() => st().phase !== 'spinning' && !st().auto} />
       </group>
     </group>
   )

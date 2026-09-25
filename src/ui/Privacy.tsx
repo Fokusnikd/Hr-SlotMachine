@@ -1,12 +1,19 @@
 import { useState } from 'react'
 import { Modal } from './common'
+import { sfx } from '../audio/sfx'
 
 /** Незаметная ссылка в углу экрана + модалка с информацией об источнике данных и приватности. */
 export function PrivacyLink() {
   const [open, setOpen] = useState(false)
   return (
     <>
-      <button className="privacy-link" onClick={() => setOpen(true)}>
+      <button
+        className="privacy-link"
+        onClick={() => {
+          sfx.uiClick()
+          setOpen(true)
+        }}
+      >
         Data & Privacy
       </button>
       {open && (
@@ -25,6 +32,17 @@ export function PrivacyLink() {
             The database isn't kept forever: it's rebuilt on a schedule from the registry's current state, and raw
             snapshots that haven't been updated in a long time or have vanished from the source are automatically
             purged from the cache.
+          </p>
+          <p className="muted small">
+            Sounds:{' '}
+            <a href="https://freesound.org" target="_blank" rel="noreferrer">
+              Freesound
+            </a>{' '}
+            &{' '}
+            <a href="https://kenney.nl" target="_blank" rel="noreferrer">
+              Kenney.nl
+            </a>{' '}
+            (CC0).
           </p>
         </Modal>
       )}

@@ -24,7 +24,14 @@ export interface Settings {
   skills: SkillId[]
   /** Сколько линий выплат играет (линии 1…N по порядку). Не меньше минимума для числа навыков. */
   lines: number
+  /** Общий звук: false — mute (громкости ползунков при этом сохраняются). */
   sound: boolean
+  /** Общая громкость, 0..1. */
+  masterVol: number
+  /** Громкость музыки и фона, 0..1. */
+  musicVol: number
+  /** Громкость эффектов и интерфейса, 0..1. */
+  sfxVol: number
   /** Анимации совпавших слотов. */
   fx: boolean
 }
@@ -144,15 +151,37 @@ interface State {
   finishUpgrade: () => void
 }
 
+export const DEFAULT_MASTER_VOL = 1
+export const DEFAULT_MUSIC_VOL = 0.7
+export const DEFAULT_SFX_VOL = 0.8
+
+/**
+ * Миграция сохранённых настроек (hrgacha:settings.v3): до реворка звука был только тумблер `sound`.
+ * Он остаётся общим mute; громкости, если их нет или они битые, получают значения по умолчанию.
+ */
+export function migrateSettings(raw: Partial<Settings> | null | undefined): Partial<Settings> {
+  const src = raw && typeof raw === 'object' ? raw : {}
+  const vol = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d)
+  return {
+    ...src,
+    ...(typeof src.sound === 'boolean' ? {} : { sound: true }),
+    masterVol: vol(src.masterVol, DEFAULT_MASTER_VOL),
+    musicVol: vol(src.musicVol, DEFAULT_MUSIC_VOL),
+    sfxVol: vol(src.sfxVol, DEFAULT_SFX_VOL),
+  }
+}
+
 const initialSettings: Settings = {
   source: 'all',
   filter: '',
   skills: [],
   lines: 1,
   sound: true,
+  masterVol: DEFAULT_MASTER_VOL,
+  musicVol: DEFAULT_MUSIC_VOL,
+  sfxVol: DEFAULT_SFX_VOL,
   fx: typeof window === 'undefined' || !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
-  ...load<Partial<Settings>>('settings.v2', {}),
-  ...load<Partial<Settings>>('settings.v3', {}),
+  ...migrateSettings({ ...load<Partial<Settings>>('settings.v2', {}), ...load<Partial<Settings>>('settings.v3', {}) }),
 }
 
 export const ROLE_SKILLS = 20
@@ -758,11 +787,13 @@ export const useGame = create<State>((set, get) => {
         }
         // Пул исчерпан — вместо кандидата утешительный приз.
       }
-      const gain = s.bonusConsolation
+      // Проигрыш — без утешительных кредитов (чтобы звон монет не путал). Утешение остаётся
+      // только когда бонус выигран, но выдать некого: пул исчерпан.
+      const gain = g.status === 'won' ? s.bonusConsolation : 0
       set({
         bonus: g.status === 'won' ? { ...g, status: 'lost' } : g,
         credits: s.credits + gain,
-        message: g.status === 'won' ? MSG.consolationEmpty(gain) : say(MSG.consolationMiss, gain),
+        message: g.status === 'won' ? MSG.consolationEmpty(gain) : say(MSG.consolationMiss),
       })
       persist()
       clearTimeout(finishTimer)

@@ -3,6 +3,7 @@ import { payoutFor, rarityLabel } from '../game/economy'
 import { Avatar, Modal, SkillChip } from './common'
 import type { CandidateSource } from '../game/types'
 import { CARD } from '../copy'
+import { sfx } from '../audio/sfx'
 
 const SOURCE_LABEL: Record<CandidateSource, string> = { jsonresume: 'JSON Resume', github: 'GitHub', mock: 'Demo' }
 
@@ -28,6 +29,10 @@ export function WinModal() {
   const excluded = useGame((s) => s.excluded)
   const poolMax = useGame((s) => s.poolMax)
   const visible = winOpen && phase === 'win'
+  const toShortlist = () => {
+    sfx.shortlist()
+    keep()
+  }
 
   const win = result?.wins[winIndex]
   if (!visible || !win) return null
@@ -87,13 +92,14 @@ export function WinModal() {
             {CARD.wheelBtn}
           </button>
         )}
-        <a className="btn btn--primary" href={c.url} target="_blank" rel="noreferrer" onClick={keep}>
+        <a className="btn btn--primary" href={c.url} target="_blank" rel="noreferrer" onClick={toShortlist} data-sfx>
           {c.source === 'jsonresume' ? CARD.openResume : CARD.openProfile}
         </a>
-        <button className="btn btn--ghost" onClick={keep}>
+        <button className="btn btn--ghost" onClick={toShortlist} data-sfx>
           {CARD.shortlist}
         </button>
-        <button className="btn btn--gold" onClick={exchange}>
+        {/* Звук обмена — «cash» из App (по stats.exchanged) */}
+        <button className="btn btn--gold" onClick={exchange} data-sfx>
           {CARD.exchange(payoutFor(win.matched.length, winScale))}
         </button>
       </div>

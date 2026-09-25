@@ -52,7 +52,6 @@ interface Anim {
   start: number
   duration: number
   done: boolean
-  lastTick: number
 }
 
 function randomStrip(pool: SkillId[]): SkillId[] {
@@ -148,7 +147,6 @@ export function Reel({ index, x }: { index: number; x: number }) {
       start: performance.now() + index * 60,
       duration: 1500 + index * 380,
       done: false,
-      lastTick: Math.floor(from),
     }
   }, [spinId, index])
 
@@ -157,20 +155,18 @@ export function Reel({ index, x }: { index: number; x: number }) {
     if (a && !a.done) {
       const p = Math.min(1, Math.max(0, (performance.now() - a.start) / a.duration))
       offset.current = a.from + (a.to - a.from) * easeOutBack(p)
-      const tick = Math.floor(offset.current)
-      if (tick !== a.lastTick && p > 0.55) sfx.tick(index)
-      a.lastTick = tick
       if (p >= 1) {
         a.done = true
         offset.current = mod(a.to, N)
-        sfx.stop(index)
+        sfx.reelStop()
         if (index === REEL_COUNT - 1) landedAt = performance.now()
-        // Золотые папки: звонок с нарастающим тоном — по числу папок на уже остановленных барабанах.
+        // Золотая папка: каждая следующая за спин — на 2 полутона выше (по числу папок на уже остановленных барабанах).
+        // Один звук на барабан, даже если на нём две папки. Фанфары бонуса — в App, когда встанут все барабаны.
         const g = useGame.getState().result?.grid
         if (g && g.some((row) => row[index] === SCATTER)) {
           let k = 0
           for (let r = 0; r < g.length; r++) for (let c = 0; c <= index; c++) if (g[r][c] === SCATTER) k++
-          sfx.ding(Math.min(8, k + 2))
+          sfx.scatter(k)
         }
         reelStopped(index)
       }
@@ -228,10 +224,6 @@ export function Reel({ index, x }: { index: number; x: number }) {
         // Одноразовые события: звук вспышки, искры, переворот, конфетти.
         const key = (name: string) => `${name}:${row}:${sym}`
         if (fxOn && !calm) {
-          if (local >= 0 && !fired.current.has(key('ding'))) {
-            fired.current.add(key('ding'))
-            if (extras.snake) sfx.ding(order)
-          }
           if (skillFx[sym] === 'sparks' && local >= 0) {
             const cycle = Math.floor(local / SPARKS_PERIOD)
             if (!fired.current.has(key(`sp${cycle}`))) {
@@ -241,10 +233,6 @@ export function Reel({ index, x }: { index: number; x: number }) {
           }
           if (extras.flip) {
             const fs = flipStart(order, winOrder.count)
-            if (tt >= fs && !fired.current.has(key('flip'))) {
-              fired.current.add(key('flip'))
-              sfx.whoosh()
-            }
             if (extras.confetti && tt >= fs + 0.55 && !fired.current.has(key('confetti'))) {
               fired.current.add(key('confetti'))
               sparkBus.emit(x, rel * ROW_H, 0.3, winOrder.color.get(row) ?? '#ffd84a', 22, 1.5)

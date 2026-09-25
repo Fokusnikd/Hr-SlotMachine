@@ -32,7 +32,7 @@ export interface SpinResult {
   /** Клетки, которые участвуют в оценке (объединение всех линий). */
   cells: { reel: number; row: number }[]
   /** Активные линии этого спина. */
-  lines: { id: number; color: string; rows: number[] }[]
+  lines: { id: number; color: string; rows: number[]; note: number }[]
   /** Все выигрыши спина (разные люди на непересекающихся клетках), лучший первым. */
   wins: {
     candidate: Candidate

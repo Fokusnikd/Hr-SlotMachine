@@ -268,8 +268,8 @@ export const MSG = {
 
   // --- Бонус «Золотая папка» ---
   bonusStart: [
-    (n: number) => `GOLDEN FOLDER ×${n}! Referral round: 3 "Match" — a candidate, 3 "Miss" — a consolation prize.`,
-    (n: number) => `GOLDEN FOLDER ×${n}! Referrals incoming: 3 "Match" — a candidate, 3 "Miss" — a consolation prize.`,
+    (n: number) => `GOLDEN FOLDER ×${n}! Referral round: 3 "Match" — a candidate, 3 "Miss" — round over.`,
+    (n: number) => `GOLDEN FOLDER ×${n}! Referrals incoming: 3 "Match" — a candidate, 3 "Miss" — you're out.`,
   ],
   bonusShields: (n: number) => ` Shields against "Miss": ${n}`,
   bonusIncoming: (n: number, waiting: string) => `GOLDEN FOLDER ×${n}!${waiting}`,
@@ -287,8 +287,8 @@ export const MSG = {
   ],
   consolationEmpty: (gain: number) => `Talent pool is empty — consolation prize +${gain} ◎`,
   consolationMiss: [
-    (gain: number) => `Three misses. Classic hiring quarter. Consolation prize +${gain} ◎`,
-    (gain: number) => `Three misses. Referrals aren't what they used to be. +${gain} ◎`,
+    'Three misses. Classic hiring quarter.',
+    "Three misses. Referrals aren't what they used to be.",
   ],
   goldenMore: (name: string, grade: number, more: number, total: number) =>
     `Golden Folder: ${name} ×${grade}! Then ${more} more from the lines. SPIN — exchange all for +${total} ◎`,

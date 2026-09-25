@@ -1,18 +1,19 @@
 import { REELS, ROWS, SCATTER, spinField, type Field } from './outcome'
 import { CALIBRATION_LINES, multFor, payScaleFrom } from './economy'
-import { BONUS_MIN, CONSOLATION_SPINS, winChance } from './bonus'
+import { BONUS_MIN, winChance } from './bonus'
 
 /**
  * Ожидаемая ценность бонуса за спин — точно, без выборки (бонус редкий, 200 спинов дали бы шум):
  * по биномиальному числу папок на 15 клетках, шансу победы и призу. Возвращает масштабируемую часть
- * (множитель лучшего кандидата пула) и фиксированную (утешительный приз) — обе в ставках линии.
+ * (множитель лучшего кандидата пула) и фиксированную — обе в ставках линии. Утешительного приза
+ * за проигранный бонус больше нет, поэтому фиксированная часть — 0 (оставлена ради формы результата).
  */
-export function bonusValue(field: Field, lines: number): { mult: number; fixed: number } {
+export function bonusValue(field: Field, _lines: number): { mult: number; fixed: number } {
   const i = field.model.symbols.indexOf(SCATTER)
   const p = i < 0 ? 0 : field.model.probs[i] / field.model.cum[field.model.cum.length - 1]
   const cells = REELS * ROWS
   let mult = 0
-  let fixed = 0
+  const fixed = 0
   let c = 1 // C(cells, k)
   for (let k = 0; k <= cells; k++) {
     if (k > 0) c = (c * (cells - k + 1)) / k
@@ -20,7 +21,6 @@ export function bonusValue(field: Field, lines: number): { mult: number; fixed: 
     const pk = c * p ** k * (1 - p) ** (cells - k)
     const w = winChance(k)
     mult += pk * w * multFor(Math.max(3, field.bestMatch))
-    fixed += pk * (1 - w) * CONSOLATION_SPINS * lines
   }
   return { mult, fixed }
 }

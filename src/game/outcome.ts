@@ -38,7 +38,15 @@ export interface Payline {
   color: string;
   /** Ряд на каждом барабане (0 — верх, 1 — середина, 2 — низ). */
   rows: number[];
+  /** Нота линии: сдвиг в полутонах по мажорной гамме (линия 1 — 0, дальше выше). Звучит, когда
+   *  линия становится последней включённой (добавили её или убрали следующую). */
+  note: number;
 }
+
+/** Ступени мажорной гаммы в полутонах. */
+const MAJOR_SCALE = [0, 2, 4, 5, 7, 9, 11];
+/** `i`-я ступень мажорной гаммы от тоники (0 — тоника, 7 — октава выше…). */
+export const majorStep = (i: number) => 12 * Math.floor(i / 7) + MAJOR_SCALE[i % 7];
 
 export const cellKey = (c: Cell) => c.row * REELS + c.reel;
 
@@ -75,6 +83,7 @@ export const PAYLINES: Payline[] = PAYLINE_ROWS.map(([rows, color], i) => ({
   id: i + 1,
   rows,
   color,
+  note: majorStep(i),
 }));
 export const MAX_LINES = PAYLINES.length;
 

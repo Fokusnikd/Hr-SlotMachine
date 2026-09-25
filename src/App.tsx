@@ -8,6 +8,8 @@ import { PrivacyLink } from './ui/Privacy'
 import { useGame } from './game/store'
 import { music, sfx } from './audio/sfx'
 import { HIRES_TO_WIN, REJECTS_TO_LOSE } from './game/bonus'
+import { REELS } from './game/outcome'
+import { pressLinesKey } from './scene/SlotMachine'
 
 const bonusPlaying = (s: ReturnType<typeof useGame.getState>) => s.phase === 'bonus' && s.bonus?.status === 'play'
 
@@ -15,24 +17,46 @@ export default function App() {
   const shortlistOpen = useUi((s) => s.shortlistOpen)
   const settingsOpen = useUi((s) => s.settingsOpen)
   const sound = useGame((s) => s.settings.sound)
+  const masterVol = useGame((s) => s.settings.masterVol)
+  const musicVol = useGame((s) => s.settings.musicVol)
+  const sfxVol = useGame((s) => s.settings.sfxVol)
 
   useEffect(() => {
     void useGame.getState().init()
+    sfx.init()
   }, [])
 
   useEffect(() => {
-    sfx.setEnabled(sound)
+    sfx.configure({ muted: !sound, master: masterVol, music: musicVol, sfx: sfxVol })
     // Звук включили посреди бонуса — музыка подхватывается.
     if (sound && bonusPlaying(useGame.getState())) music.start()
-  }, [sound])
+  }, [sound, masterVol, musicVol, sfxVol])
 
-  // Звуки результата
+  // Звуки игры по изменениям состояния
   useEffect(
     () =>
       useGame.subscribe((s, prev) => {
-        if (s.phase === 'win' && prev.phase !== 'win' && s.result?.rarity) sfx.win(s.result.rarity)
-        if (s.phase === 'idle' && prev.phase === 'spinning' && s.result?.nearMiss) sfx.nearMiss()
-        if (s.stats.exchanged > prev.stats.exchanged) sfx.coins(12)
+        // Линии: каждая звучит своей нотой, когда становится последней включённой (добавили или убрали).
+        if (s.lines.length !== prev.lines.length && prev.lines.length > 0 && s.lines.length > 0) sfx.lineNote(s.lines[s.lines.length - 1].note)
+        // Барабаны: луп на время вращения, тише с каждой остановкой.
+        if (s.spinId !== prev.spinId && s.phase === 'spinning') sfx.spinStart()
+        if (s.stoppedReels !== prev.stoppedReels && s.stoppedReels > 0) sfx.reelsLeft(REELS - s.stoppedReels, REELS)
+        if (prev.phase === 'spinning' && s.phase !== 'spinning' && s.stoppedReels < REELS) sfx.reelsLeft(0, REELS)
+        // Все барабаны встали и выпал бонус — фанфары до открытия окна миниигры.
+        if (s.stoppedReels === REELS && prev.stoppedReels < REELS && s.result?.bonus) sfx.bonusFanfare()
+        // Выигрыш — один звук по лучшему кандидату (wins[0]). После бонуса не звучит: победа уже
+        // озвучена в момент, когда открыта последняя папка с матчем. Пустой спин и «почти» — без звука.
+        if (s.phase === 'win' && prev.phase === 'spinning' && s.result?.wins[0]) sfx.win(s.result.wins[0].rarity)
+        if (s.stats.exchanged > prev.stats.exchanged) sfx.cash()
+        const mini = s.phase === 'bonus' || s.phase === 'upgrade'
+        if (mini !== (prev.phase === 'bonus' || prev.phase === 'upgrade')) sfx.miniGame(mini)
+        if (s.phase === 'bonus' && prev.phase !== 'bonus') sfx.bonusOpened()
+        if (prev.phase === 'upgrade' && s.phase !== 'upgrade') sfx.wheelEnd()
+        // ЗАБРАТЬ на колесе торга (карточка заменена новым держателем) — звук уровня новой карточки.
+        if (prev.phase === 'upgrade' && s.phase === 'win' && s.result !== prev.result) {
+          const w = s.result?.wins[s.winIndex]
+          if (w) sfx.win(w.rarity)
+        }
         // Музыка бонуса: играет, пока идёт партия; на исходе — затухает под фанфары/утешение.
         const on = bonusPlaying(s)
         if (on && !bonusPlaying(prev)) music.start()
@@ -50,8 +74,8 @@ export default function App() {
       if (el.closest('input, textarea, [role="dialog"]')) return
       if (shortlistOpen || settingsOpen || useGame.getState().winOpen) return
       // + / − — добавить или убрать линию
-      if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') return useGame.getState().changeLines(1)
-      if (e.key === '-' || e.code === 'NumpadSubtract') return useGame.getState().changeLines(-1)
+      if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') return pressLinesKey(1)
+      if (e.key === '-' || e.code === 'NumpadSubtract') return pressLinesKey(-1)
       // Enter — открыть карточку выпавшего кандидата
       if (e.key === 'Enter' && !el.closest('button, a')) return useGame.getState().openWin()
       if (e.code !== 'Space' || e.repeat) return
