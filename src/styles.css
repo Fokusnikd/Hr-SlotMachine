@@ -366,18 +366,33 @@ button {
 }
 .modal {
   position: relative;
+  display: flex;
+  flex-direction: column;
   width: min(560px, 100%);
   max-height: calc(100vh - 32px);
-  overflow: auto;
+  max-height: calc(100dvh - 32px);
+  /* Прокручивается .modal__body, а само окно обрезает всё по скруглённой рамке —
+     крестик остаётся внутри и не уезжает при скролле. */
+  overflow: hidden;
   background: var(--panel-solid);
   border: 1px solid var(--line);
   border-radius: 20px;
-  padding: 26px;
   box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
   animation: pop 0.35s cubic-bezier(0.2, 1.4, 0.4, 1);
 }
+.modal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 26px;
+}
 .modal h2 {
   margin: 0 0 16px;
+}
+/* Заголовок не заезжает под крестик. */
+.modal__body > h2:first-child {
+  padding-right: 44px;
 }
 @keyframes pop {
   from {
@@ -387,8 +402,11 @@ button {
 }
 .modal__close {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  flex: none;
+  margin: 0;
 }
 
 /* ---------- Win card ---------- */
@@ -398,7 +416,17 @@ button {
   box-shadow:
     0 0 50px color-mix(in srgb, var(--accent) 45%, transparent),
     0 30px 80px rgba(0, 0, 0, 0.6);
+}
+.win .modal__body {
   padding-top: 0;
+}
+/* У карточки сверху баннер — крестик поменьше и по центру баннера, внутри рамки. */
+.win .modal__close {
+  top: 5px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  font-size: 15px;
 }
 .win--rare {
   --accent: #b36bff;
@@ -408,7 +436,8 @@ button {
 }
 .win__banner {
   margin: 0 -26px 20px;
-  padding: 10px;
+  /* по бокам — место под крестик */
+  padding: 10px 60px;
   text-align: center;
   font-weight: 900;
   letter-spacing: 0.2em;
@@ -629,6 +658,37 @@ button {
 }
 .spacer {
   flex: 1;
+}
+/* Настройки — 70% ширины экрана; на телефонах уже 70% мало — почти во всю ширину. */
+.modal.settings {
+  width: 70vw;
+  max-width: none;
+}
+@media (max-width: 600px) {
+  .modal.settings {
+    width: 100%;
+  }
+}
+
+/* ---------- Top up ---------- */
+.modal.topup {
+  width: min(420px, 100%);
+  text-align: center;
+}
+.modal.topup p {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 20px;
+}
+.modal.topup h2 {
+  padding-inline: 44px;
+}
+.topup__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 /* ---------- Mobile ---------- */

@@ -50,12 +50,13 @@ export function Modal({ children, onClose, className = '' }: { children: React.R
           if (el && !el.hasAttribute('data-sfx') && !(el as HTMLButtonElement).disabled) sfx.uiClick()
         }}
       >
+        {/* Крестик — вне прокручиваемой области: не уезжает при скролле и не вылезает за края окна. */}
         {onClose && (
           <button className="icon-btn modal__close" onClick={onClose} aria-label="Close">
             ✕
           </button>
         )}
-        {children}
+        <div className="modal__body">{children}</div>
       </div>
     </div>
   )
