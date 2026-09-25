@@ -167,6 +167,15 @@ export const sfx = {
     const id = face === 'hire' ? 'folder-match' : face === 'reject' ? 'folder-miss' : face === 'shield' ? 'folder-shield' : 'folder-noshow'
     audio.play(id, { jitter: true })
   },
+  /** Потолок колеса — финальная победа: фанфары. */
+  wheelFinal(step: number) {
+    audio.jingle('win-unicorn')
+    wheelTension(step)
+  },
+  /** Неактивная кнопка: тот же глухой звук, что и упор линий. */
+  disabled() {
+    audio.play('line-limit')
+  },
   /** Проигрыш на колесе торга: музыка обрывается, грустная труба. */
   wheelLose() {
     clearTimeout(wheelMusicTimer)

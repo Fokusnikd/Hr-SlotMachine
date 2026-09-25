@@ -52,11 +52,6 @@ export default function App() {
         if (mini !== (prev.phase === 'bonus' || prev.phase === 'upgrade')) sfx.miniGame(mini)
         if (s.phase === 'bonus' && prev.phase !== 'bonus') sfx.bonusOpened()
         if (prev.phase === 'upgrade' && s.phase !== 'upgrade') sfx.wheelEnd()
-        // ЗАБРАТЬ на колесе торга (карточка заменена новым держателем) — звук уровня новой карточки.
-        if (prev.phase === 'upgrade' && s.phase === 'win' && s.result !== prev.result) {
-          const w = s.result?.wins[s.winIndex]
-          if (w) sfx.win(w.rarity)
-        }
         // Музыка бонуса: играет, пока идёт партия; на исходе — затухает под фанфары/утешение.
         const on = bonusPlaying(s)
         if (on && !bonusPlaying(prev)) music.start()

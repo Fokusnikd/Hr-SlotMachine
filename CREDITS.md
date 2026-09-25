@@ -26,7 +26,7 @@
 | folder-miss | 8-bit Wrong Sound | JapanYoshiTheGamer | Freesound | https://freesound.org/people/JapanYoshiTheGamer/sounds/361260/ |
 | folder-noshow | Boing 2 | magnuswaker | Freesound | https://freesound.org/people/magnuswaker/sounds/540790/ |
 | folder-shield | Clang.ogg | egomassive | Freesound | https://freesound.org/people/egomassive/sounds/536781/ |
-| wheel-music | Suspense Music Loop | Ncone | Freesound | https://freesound.org/people/Ncone/sounds/730224/ |
+| wheel-music | quiz game music loop BPM 90.wav | portwain | Freesound | https://freesound.org/people/portwain/sounds/220060/ |
 | wheel-win | WinBrass.wav | Fupicat | Freesound | https://freesound.org/people/Fupicat/sounds/521639/ |
 | drumroll | drumroll.wav | adriann | Freesound | https://freesound.org/people/adriann/sounds/191718/ |
 | wheel-respin | record rewind.mp3 | richienoodles | Freesound | https://freesound.org/people/richienoodles/sounds/178555/ |

@@ -18,7 +18,7 @@ export const SOUNDS = {
   button: { file: 'button', bus: 'ui' }, // Кнопки автомата, 0.09 с
   'ui-click': { file: 'ui-click', bus: 'ui' }, // UI-клик, 0.09 с
   'line-note': { file: 'line-note', bus: 'ui' }, // Нота линии (LloydEvans09, Marimba note struck), 0.6 с — высота по номеру линии
-  'line-limit': { file: 'line-limit', bus: 'ui' }, // Упор: линий уже максимум/минимум (Kenney, bong_001), 0.16 с
+  'line-limit': { file: 'line-limit', bus: 'ui' }, // Упор линий и неактивные кнопки (Kenney, bong_001), 0.16 с
   scatter: { file: 'scatter', bus: 'sfx' }, // Золотая папка (suntemple, Retro Bonus Pickup), 0.25 с
   'win-match': { file: 'win-match', bus: 'sfx' }, // Match, 2.07 с
   'win-strong': { file: 'win-strong', bus: 'sfx' }, // Strong match, 3.79 с
@@ -33,7 +33,7 @@ export const SOUNDS = {
   'folder-miss': { file: 'folder-miss', bus: 'sfx' }, // Папка: Отказ (JapanYoshiTheGamer, 8-bit Wrong Sound), 0.6 с
   'folder-noshow': { file: 'folder-noshow', bus: 'sfx' }, // Папка: Пустая (magnuswaker, Boing 2), 1.0 с
   'folder-shield': { file: 'folder-shield', bus: 'sfx' }, // Папка: Защита (egomassive, Clang), 0.6 с
-  'wheel-music': { file: 'wheel-music', bus: 'music', loop: true }, // Музыка колеса (Ncone, Suspense Music Loop), 20.9 с
+  'wheel-music': { file: 'wheel-music', bus: 'music', loop: true }, // Музыка колеса (portwain, quiz game music loop BPM 90), 16 с
   'wheel-win': { file: 'wheel-win', bus: 'sfx' }, // Победа на колесе (Fupicat, WinBrass), 2.1 с
   drumroll: { file: 'drumroll', bus: 'sfx' }, // Барабанная дробь, 6.0 с — пока не подключена, отложена
   'wheel-respin': { file: 'wheel-respin', bus: 'sfx' }, // Жёлтый — респин, 1.91 с

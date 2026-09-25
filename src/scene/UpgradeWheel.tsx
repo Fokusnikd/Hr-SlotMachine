@@ -161,7 +161,9 @@ export function UpgradeWheel() {
     const top = BOX_Y() - BOX_H() / 2
     if (upgrade.last === 'win') {
       pulse.current = 1
-      sfx.wheelWin(upgrade.step)
+      // Потолок — финальная победа: фанфары; обычная ступень — короткий джингл.
+      if (upgrade.status === 'max') sfx.wheelFinal(upgrade.step)
+      else sfx.wheelWin(upgrade.step)
       sparkBus.emit(0, top, 0.5, '#5cff9a', upgrade.status === 'max' ? 40 : 24, 1.4)
       if (upgrade.status === 'max') setTimeout(() => sparkBus.emit(0, CY(), 0.5, '#ffd84a', 40, 1.8), 250)
       const won = wonFresh(upgrade).slice(0, FLY_MAX)
@@ -410,8 +412,8 @@ export function UpgradeWheel() {
 
       {/* Кнопки: КРУТИТЬ и ЗАБРАТЬ / НАЗАД. */}
       {[
-        { tex: spinTex, y: SIDE_Y() + BTN_H() * 0.7, act: () => canSpin && spinWheel() },
-        { tex: takeTex, y: SIDE_Y() - BTN_H() * 0.7, act: () => (canTake || canBack) && takeUpgrade() },
+        { tex: spinTex, y: SIDE_Y() + BTN_H() * 0.7, active: canSpin, act: spinWheel },
+        { tex: takeTex, y: SIDE_Y() - BTN_H() * 0.7, active: canTake || canBack, act: takeUpgrade },
       ].map((b, i) => (
         <group
           key={i}
@@ -422,6 +424,8 @@ export function UpgradeWheel() {
           onClick={(e) => {
             if (!inPhase('upgrade')) return
             e.stopPropagation()
+            // Неактивная кнопка (например КРУТИТЬ на потолке) — глухой звук, без действия.
+            if (!b.active) return sfx.disabled()
             sfx.button()
             b.act()
           }}
