@@ -4,9 +4,10 @@ import * as THREE from 'three'
 import { useGame } from '../game/store'
 import { BOARD_SIZE, type BonusGame } from '../game/bonus'
 import { folderBackTexture, folderFrontTexture } from './textures'
-import { CLIP, ROW_H, useLayoutVersion, WIN_H, WIN_W } from './layout'
+import { CLIP, ROW_H, useLayoutVersion, WIN_W } from './layout'
 import { sfx } from '../audio/sfx'
 import { sparkBus } from './Sparks'
+import { inPhase, MiniGameWindow } from './MiniGameWindow'
 
 /** Миниигра «Золотая папка» в окне барабанов: 4×3 папки, которые переворачиваются по клику. */
 const COLS = 4
@@ -25,14 +26,12 @@ const faceOf = (g: BonusGame, i: number): Face => (g.blocked.includes(i) ? 'shie
 export function BonusBoard() {
   // Размер окна меняется под экран — перерисовываемся вместе с ним.
   useLayoutVersion()
-  const root = useRef<THREE.Group>(null!)
   const folders = useRef<(THREE.Group | null)[]>([])
   const backs = useRef<(THREE.MeshStandardMaterial | null)[]>([])
   const fronts = useRef<(THREE.MeshStandardMaterial | null)[]>([])
   const hovered = useRef(-1)
   /** Последняя партия — держим, пока доска уезжает после окончания бонуса. */
   const last = useRef<BonusGame | null>(null)
-  const appear = useRef(0)
   const bonus = useGame((s) => s.bonus)
   const openFolder = useGame((s) => s.openFolder)
   if (bonus) last.current = bonus
@@ -74,12 +73,6 @@ export function BonusBoard() {
 
   useFrame((state, dt) => {
     const g = shown
-    const { phase, bonusAt } = useGame.getState()
-    const on = phase === 'bonus' && (performance.now() - bonusAt) / 1000 > ENTER_DELAY
-    appear.current += ((on ? 1 : 0) - appear.current) * (1 - Math.exp(-dt * (on ? 6 : 8)))
-    root.current.visible = appear.current > 0.01 && !!g
-    // Сверху — вниз, в окно.
-    root.current.position.y = (1 - appear.current) * WIN_H * 1.1
     if (!g) return
     const t = state.clock.elapsedTime
     const over = g.status !== 'play'
@@ -109,12 +102,7 @@ export function BonusBoard() {
   })
 
   return (
-    <group ref={root} visible={false}>
-      {/* Сукно под папками — перед разделителями барабанов (они заканчиваются на z = 0). */}
-      <mesh position={[0, 0, 0.03]}>
-        <planeGeometry args={[WIN_W, WIN_H]} />
-        <meshStandardMaterial color="#2a0c3f" roughness={0.95} clippingPlanes={CLIP} />
-      </mesh>
+    <MiniGameWindow phase="bonus" startedAt={(s) => s.bonusAt} enterDelay={ENTER_DELAY} hasContent={!!shown} cloth="#2a0c3f" clothRoughness={0.95}>
       {Array.from({ length: BOARD_SIZE }, (_, i) => {
         const face = shown ? faceOf(shown, i) : 'empty'
         return (
@@ -124,12 +112,12 @@ export function BonusBoard() {
                 folders.current[i] = g
               }}
               onClick={(e) => {
-                if (useGame.getState().phase !== 'bonus') return
+                if (!inPhase('bonus')) return
                 e.stopPropagation()
                 openFolder(i)
               }}
               onPointerOver={(e) => {
-                if (useGame.getState().phase !== 'bonus') return
+                if (!inPhase('bonus')) return
                 e.stopPropagation()
                 hovered.current = i
                 document.body.style.cursor = 'pointer'
@@ -178,6 +166,6 @@ export function BonusBoard() {
           </group>
         )
       })}
-    </group>
+    </MiniGameWindow>
   )
 }

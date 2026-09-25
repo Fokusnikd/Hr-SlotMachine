@@ -2,13 +2,14 @@ import { upgradeCandidates, useGame } from '../game/store'
 import { payoutFor, rarityLabel } from '../game/economy'
 import { Avatar, Modal, SkillChip } from './common'
 import type { CandidateSource } from '../game/types'
+import { CARD } from '../copy'
 
 const SOURCE_LABEL: Record<CandidateSource, string> = { jsonresume: 'JSON Resume', github: 'GitHub', mock: 'Demo' }
 
 function yearsLabel(y?: number) {
   if (y == null) return undefined
-  if (y < 1) return '< 1 year experience'
-  return `${y} ${y === 1 ? 'year' : 'years'} experience`
+  if (y < 1) return CARD.lessThanYear
+  return CARD.years(y)
 }
 
 export function WinModal() {
@@ -25,6 +26,7 @@ export function WinModal() {
   const startUpgrade = useGame((s) => s.startUpgrade)
   const filtered = useGame((s) => s.filtered)
   const excluded = useGame((s) => s.excluded)
+  const poolMax = useGame((s) => s.poolMax)
   const visible = winOpen && phase === 'win'
 
   const win = result?.wins[winIndex]
@@ -43,9 +45,9 @@ export function WinModal() {
   return (
     <Modal className={`win win--${win.rarity}`} onClose={closeWin}>
       <div className="win__banner">
-        {win.fromBonus && 'Golden Folder · '}
+        {win.fromBonus && CARD.fromBonus}
         {rarityLabel(win.rarity, win.matched.length)}
-        {total > 1 && <span className="win__count"> · {winIndex + 1} of {total}</span>}
+        {total > 1 && <span className="win__count"> · {winIndex + 1} {CARD.of} {total}</span>}
       </div>
       <div className="win__head">
         <Avatar c={c} size={88} />
@@ -77,22 +79,22 @@ export function WinModal() {
           ))}
         </div>
       )}
-      {c.source === 'mock' && <div className="note">Demo candidate: the link opens a search for similar profiles on GitHub.</div>}
+      {c.source === 'mock' && <div className="note">{CARD.demoNote}</div>}
       <div className="win__actions">
-        {isMax && <span className="win__max">★ Maximum</span>}
+        {isMax && <span className="win__max">{win.matched.length >= poolMax ? CARD.maxUnicorn : CARD.maxLeft}</span>}
         {canUpgrade && (
-          <button className="btn btn--upgrade" onClick={startUpgrade} title="Spin the negotiation wheel: green — a stronger match steps in and you can keep climbing, yellow — free respin, red — the candidate walks and the whole chain is lost">
-            🎡 Negotiation wheel
+          <button className="btn btn--upgrade" onClick={startUpgrade} title={CARD.wheelHint}>
+            {CARD.wheelBtn}
           </button>
         )}
         <a className="btn btn--primary" href={c.url} target="_blank" rel="noreferrer" onClick={keep}>
-          {c.source === 'jsonresume' ? 'Open resume ↗' : 'Open profile ↗'}
+          {c.source === 'jsonresume' ? CARD.openResume : CARD.openProfile}
         </a>
         <button className="btn btn--ghost" onClick={keep}>
-          ⭐ Add to shortlist
+          {CARD.shortlist}
         </button>
         <button className="btn btn--gold" onClick={exchange}>
-          Exchange for +{payoutFor(win.matched.length, winScale)} ◎
+          {CARD.exchange(payoutFor(win.matched.length, winScale))}
         </button>
       </div>
     </Modal>

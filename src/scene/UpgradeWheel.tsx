@@ -1,18 +1,33 @@
-import { useEffect, useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGame } from '../game/store'
 import { chancesFor, sectorAt, WHEEL_SPIN_MS, type UpgradeGame } from '../game/upgrade'
-import { keyLabelTexture, wheelButtonTexture, wheelFaceTexture, wheelPanelTexture } from './textures'
+import { getSkill } from '../game/skills'
+import type { SkillId } from '../game/types'
+import {
+  keyLabelTexture,
+  skillChipTexture,
+  WHEEL_WINDOW_H,
+  WHEEL_WINDOW_W,
+  wheelButtonTexture,
+  wheelFaceTexture,
+  wheelPanelTexture,
+  wheelWindowTexture,
+  type WheelWindowView,
+} from './textures'
+import { WHEEL } from '../copy'
 import { CLIP, useLayoutVersion, WIN_H, WIN_W } from './layout'
 import { sfx } from '../audio/sfx'
 import { sparkBus } from './Sparks'
-import type { Candidate } from '../game/types'
+import { inPhase, MiniGameWindow } from './MiniGameWindow'
 
 /**
- * Миниигра «Колесо торга» в окне барабанов: колесо с секторами «Подписал / Торгуется / Ушёл»
- * по центру, табло цепочки слева, кнопки КРУТИТЬ / ЗАБРАТЬ справа. Итог вращения решён в store
- * заранее (upgrade.landAt) — колесо только красиво доезжает до этой точки.
+ * Миниигра «Колесо торга» в окне барабанов: колесо с секторами «Подписал (конверт) / Торгуется /
+ * Ушёл» по центру, над стрелкой — окошко с тем, что под стрелкой (конверт / респин / «ушёл»),
+ * после победы — выигранные навыки. Табло цепочки слева, кнопки КРУТИТЬ / ЗАБРАТЬ справа.
+ * Итог вращения решён в store заранее (upgrade.landAt) — колесо только красиво доезжает до этой
+ * точки. При победе плашки новых навыков летят из окошка на табло.
  */
 const TAU = Math.PI * 2
 /** Минимум полных оборотов за вращение. */
@@ -21,56 +36,95 @@ const TURNS = 5
 const SPIN_DUR = WHEEL_SPIN_MS / 1000 - 0.5
 const BULBS = 20
 const ENTER_DELAY = 0.1
+/** Полёт плашки навыка на табло, с; следующая плашка стартует с задержкой FLY_STAGGER. */
+const FLY_DUR = 0.75
+const FLY_STAGGER = 0.12
+const FLY_MAX = 8
 
-const R = () => WIN_H * 0.42
-const CY = () => -WIN_H * 0.035
-/** Ширина боковой колонки (табло / кнопки). */
+const R = () => WIN_H * 0.36
+const CY = () => -WIN_H * 0.075
+/** Окошко над стрелкой. */
+const BOX_H = () => WIN_H * 0.15
+const BOX_W = () => BOX_H() * (WHEEL_WINDOW_W / WHEEL_WINDOW_H)
+const BOX_Y = () => WIN_H / 2 - WIN_H * 0.015 - BOX_H() / 2
+/** Боковые колонки (табло / кнопки) — по центру окна, независимо от колеса. */
+const SIDE_Y = () => -WIN_H * 0.035
 const SIDE = () => (WIN_W - 2 * R() * 1.08) / 2
 const SIDE_X = () => R() * 1.08 + SIDE() / 2
 const PANEL_W = () => Math.min(SIDE() - 0.3, WIN_H * 0.95)
 const PANEL_H = () => PANEL_W() * (560 / 640)
 const BTN_W = () => Math.min(SIDE() - 0.4, WIN_H * 0.8)
 const BTN_H = () => BTN_W() * (208 / 512)
+const CHIP_W = () => BOX_W() * 0.4
+const CHIP_H = () => CHIP_W() * (96 / 320)
 
 /** Плавное торможение: быстро стартует, долго дотягивает последние сектора. */
 const ease = (t: number) => 1 - Math.pow(1 - t, 4)
+const easeInOut = (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2)
+
+/** Навыки, которые принесла последняя победа. */
+const wonFresh = (g: UpgradeGame): SkillId[] => {
+  if (!g.prevSkills) return []
+  const had = new Set(g.prevSkills)
+  return g.skills.filter((id) => !had.has(id))
+}
+
+interface Flight {
+  game: number
+  step: number
+  t0: number
+  skills: SkillId[]
+  landed: number
+}
 
 export function UpgradeWheel() {
   useLayoutVersion()
   const upgrade = useGame((s) => s.upgrade)
   const spinWheel = useGame((s) => s.spinWheel)
   const takeUpgrade = useGame((s) => s.takeUpgrade)
-  const root = useRef<THREE.Group>(null!)
   const wheel = useRef<THREE.Group>(null!)
   const pointer = useRef<THREE.Group>(null!)
+  const box = useRef<THREE.Group>(null!)
+  const boxMat = useRef<THREE.MeshBasicMaterial>(null!)
+  const boxKey = useRef('')
+  const boxKick = useRef(0)
+
   const bulbs = useRef<(THREE.MeshBasicMaterial | null)[]>([])
   const btns = useRef<(THREE.Group | null)[]>([])
+  const chips = useRef<(THREE.Mesh | null)[]>([])
   const hovered = useRef(-1)
-  const appear = useRef(0)
   const pulse = useRef(0)
   const kick = useRef(0)
-  const anim = useRef({ angle: 0, from: 0, to: 0, t0: -1, spins: 0, sector: -1 })
+  // game — номер партии: счётчик spins у каждой партии свой, и без сброса первое вращение новой
+  // партии могло совпасть со старым значением — колесо стояло, а кнопки уже были серыми.
+  const anim = useRef({ angle: 0, from: 0, to: 0, t0: -1, spins: 0, sector: -1, game: -1 })
+  /** Полёт плашек после победы; пока он идёт, табло показывает навыки без новых. */
+  const flight = useRef<Flight | null>(null)
+  const [flying, setFlying] = useState(false)
   /** Последняя партия — держим, пока окно уезжает после окончания миниигры. */
   const last = useRef<UpgradeGame | null>(null)
   if (upgrade) last.current = upgrade
   const g = upgrade ?? last.current
 
+  // Лицо колеса: на зелёных секторах — запечатанные конверты.
   const face = useMemo(() => (g ? wheelFaceTexture(g.sectors) : null), [g?.sectors])
   useEffect(() => () => face?.dispose(), [face])
 
   const odds = g ? Math.round(chancesFor(g.grade).win) : 0
   // На табло — совпавшие навыки держателя, а не имя: ставка делается на набор навыков, не на человека.
-  const targets = useGame((s) => s.targets)
+  // У исходной карточки это навыки, сложившиеся на линиях (их число = звёзды), а не все навыки кандидата.
+  // Пока плашки летят, новых навыков на табло ещё нет — они появляются по прилёту.
   const skills = useMemo(() => {
     if (!g) return []
-    const t = new Set(targets)
-    const matched = (c: Candidate) => [...new Set(c.skills.filter((sk) => t.has(sk)))]
-    const before = new Set(g.prev ? matched(g.prev) : [])
-    return matched(g.holder).map((id) => ({ id, fresh: !!g.prev && !before.has(id) }))
-  }, [g?.holder, g?.prev, targets])
-  const panelKey = g ? JSON.stringify([skills, g.grade, g.path, g.nextGrade, odds, g.status, g.last]) : ''
+    const before = new Set(g.prevSkills ?? [])
+    const all = g.skills.map((id) => ({ id, fresh: !!g.prevSkills && !before.has(id) }))
+    return flying ? all.filter((s) => !s.fresh) : all
+  }, [g?.skills, g?.prevSkills, flying])
+  const poolMax = useGame((s) => s.poolMax)
+  const unicorn = !!g && g.grade >= poolMax
+  const panelKey = g ? JSON.stringify([skills, g.grade, g.path, g.nextGrade, odds, g.status, g.last, unicorn]) : ''
   const panel = useMemo(
-    () => (g ? wheelPanelTexture({ skills, grade: g.grade, path: g.path, nextGrade: g.nextGrade, odds, status: g.status, last: g.last }) : null),
+    () => (g ? wheelPanelTexture({ skills, grade: g.grade, path: g.path, nextGrade: g.nextGrade, odds, status: g.status, last: g.last, unicorn }) : null),
     [panelKey],
   )
   useEffect(() => () => panel?.dispose(), [panel])
@@ -81,19 +135,21 @@ export function UpgradeWheel() {
   const canBack = g?.status === 'ready' && g.step === 0
   const spinTex =
     g?.status === 'max'
-      ? wheelButtonTexture('★ MAX', 'nobody stronger', 'off')
-      : wheelButtonTexture('SPIN', g ? `${g.grade}★ → ${g.nextGrade ?? '?'}★ · ${odds}%` : '', canSpin ? 'spin' : 'off')
+      ? wheelButtonTexture(WHEEL.maxBtn, WHEEL.maxBtnSub, 'off')
+      : wheelButtonTexture(WHEEL.spinBtn, g ? `${g.grade}★ → ${g.nextGrade ?? '?'}★ · ${odds}%` : '', canSpin ? 'spin' : 'off')
   const takeTex = canBack
-    ? wheelButtonTexture('BACK', g ? `keep ×${g.grade}` : '', 'take')
-    : wheelButtonTexture('TAKE', g ? `sign ×${g.grade}` : '', canTake ? 'take' : 'off')
+    ? wheelButtonTexture(WHEEL.backBtn, g ? WHEEL.keep(g.grade) : '', 'take')
+    : wheelButtonTexture(WHEEL.takeBtn, g ? WHEEL.sign(g.grade) : '', canTake ? 'take' : 'off')
 
-  // Звук и искры: вход, старт вращения, исход.
+  // Звук и искры: вход, старт вращения, исход. На победе — запуск полёта плашек.
   const prev = useRef<UpgradeGame | null>(null)
   useEffect(() => {
     const p = prev.current
     prev.current = upgrade
     if (!upgrade) return
-    if (!p || p.originId !== upgrade.originId) {
+    if (!p || p.id !== upgrade.id) {
+      flight.current = null
+      setFlying(false)
       sfx.whoosh()
       return
     }
@@ -102,12 +158,17 @@ export function UpgradeWheel() {
       return
     }
     if (p.status !== 'spinning' || upgrade.status === 'spinning') return
-    const top = CY() + R()
+    const top = BOX_Y() - BOX_H() / 2
     if (upgrade.last === 'win') {
       pulse.current = 1
       sfx.win(upgrade.status === 'max' ? 'legendary' : 'rare')
       sparkBus.emit(0, top, 0.5, '#5cff9a', upgrade.status === 'max' ? 40 : 24, 1.4)
       if (upgrade.status === 'max') setTimeout(() => sparkBus.emit(0, CY(), 0.5, '#ffd84a', 40, 1.8), 250)
+      const won = wonFresh(upgrade).slice(0, FLY_MAX)
+      if (won.length) {
+        flight.current = { game: upgrade.id, step: upgrade.step, t0: performance.now() / 1000, skills: won, landed: 0 }
+        setFlying(true)
+      }
     } else if (upgrade.last === 'push') {
       sfx.ding(4)
       sparkBus.emit(0, top, 0.5, '#ffd84a', 12)
@@ -118,14 +179,15 @@ export function UpgradeWheel() {
   }, [upgrade])
 
   useFrame((state, dt) => {
-    const { phase, upgradeAt } = useGame.getState()
-    const on = phase === 'upgrade' && (performance.now() - upgradeAt) / 1000 > ENTER_DELAY
-    appear.current += ((on ? 1 : 0) - appear.current) * (1 - Math.exp(-dt * (on ? 6 : 8)))
-    root.current.visible = appear.current > 0.01 && !!g
-    root.current.position.y = (1 - appear.current) * WIN_H * 1.1
     if (!g) return
     const t = state.clock.elapsedTime
     const a = anim.current
+    // Новая партия — счётчик вращений с нуля, недокрученная анимация прошлой партии не продолжается.
+    if (a.game !== g.id) {
+      a.game = g.id
+      a.spins = 0
+      a.t0 = -1
+    }
 
     // Новое вращение: доводим колесо по часовой до точки landAt (под стрелкой — доля φ/2π).
     if (g.status === 'spinning' && g.landAt != null && g.spins !== a.spins) {
@@ -145,7 +207,8 @@ export function UpgradeWheel() {
 
     // Щелчок стрелки на каждой границе сектора.
     const u = (((a.angle / TAU) % 1) + 1) % 1
-    const sector = g.sectors.indexOf(sectorAt(g.sectors, u))
+    const under = sectorAt(g.sectors, u)
+    const sector = g.sectors.indexOf(under)
     if (sector !== a.sector) {
       if (a.t0 >= 0) {
         kick.current = 1
@@ -155,6 +218,67 @@ export function UpgradeWheel() {
     }
     kick.current *= Math.exp(-dt * 12)
     pointer.current.rotation.z = -kick.current * 0.45
+
+    // Окошко над стрелкой. Во время вращения — сектор под стрелкой (мелькает, как в телешоу):
+    // конверт / респин / «ушёл»; в ожидании — конверт (на что играем); после жёлтого — респин;
+    // во время полёта и на потолке — только что выигранные навыки; после проигрыша — «ушёл».
+    const f = flight.current
+    let view: WheelWindowView
+    if (f && f.game === g.id) view = { kind: 'won', skills: f.skills }
+    else if (g.status === 'max') view = { kind: 'won', skills: wonFresh(g) }
+    else if (g.status === 'lost') view = { kind: 'lose' }
+    else if (g.status === 'ready') view = { kind: g.last === 'push' ? 'push' : 'envelope' }
+    else view = { kind: under.kind === 'win' ? 'envelope' : under.kind }
+    const vKey = view.kind === 'won' ? `${view.kind}|${view.skills.join()}` : view.kind
+    if (vKey !== boxKey.current) {
+      boxKey.current = vKey
+      boxMat.current.map = wheelWindowTexture(view)
+      boxMat.current.needsUpdate = true
+      boxKick.current = a.t0 >= 0 ? 0.5 : 1
+    }
+    boxKick.current *= Math.exp(-dt * 10)
+    box.current.scale.setScalar(1 + boxKick.current * 0.05)
+
+    // Полёт плашек навыков из окошка на табло.
+    const now = performance.now() / 1000
+    const toX = -SIDE_X()
+    const toY = SIDE_Y() + PANEL_H() * 0.2
+    chips.current.forEach((m, i) => {
+      if (!m) return
+      if (!f || f.game !== g.id || i >= f.skills.length) {
+        m.visible = false
+        return
+      }
+      const lt = now - f.t0 - i * FLY_STAGGER
+      const p = Math.min(1, Math.max(0, lt / FLY_DUR))
+      m.visible = lt >= 0 && p < 1
+      const mat = m.material as THREE.MeshBasicMaterial
+      if (mat.map !== skillChipTexture(f.skills[i])) {
+        mat.map = skillChipTexture(f.skills[i])
+        mat.needsUpdate = true
+      }
+      const n = f.skills.length
+      const fromX = (i - (n - 1) / 2) * CHIP_W() * 0.9
+      const fromY = BOX_Y()
+      const e = easeInOut(p)
+      // Дуга: вверх-влево и вниз на табло.
+      const x = THREE.MathUtils.lerp(fromX, toX, e)
+      const y = THREE.MathUtils.lerp(fromY, toY, e) + Math.sin(p * Math.PI) * WIN_H * 0.12
+      m.position.set(x, y, 0.3)
+      m.rotation.z = Math.sin(p * Math.PI) * 0.35
+      m.scale.setScalar(1 + Math.sin(p * Math.PI) * 0.25 - p * 0.25)
+      if (lt >= FLY_DUR && f.landed <= i) {
+        f.landed = i + 1
+        sfx.ding(4 + i * 2)
+        sparkBus.emit(toX, toY, 0.5, getSkill(f.skills[i]).color, 14, 1.1)
+        if (f.landed >= n) {
+          // Все долетели — табло показывает новые навыки с «+».
+          flight.current = null
+          setFlying(false)
+          sparkBus.emit(toX, toY, 0.5, '#5cff9a', 20, 1.3)
+        }
+      }
+    })
 
     // Пульс колеса при перестройке под новый грейд.
     pulse.current *= Math.exp(-dt * 3)
@@ -187,7 +311,7 @@ export function UpgradeWheel() {
 
   const hover = (i: number) => ({
     onPointerOver: (e: { stopPropagation: () => void }) => {
-      if (useGame.getState().phase !== 'upgrade') return
+      if (!inPhase('upgrade')) return
       e.stopPropagation()
       hovered.current = i
       document.body.style.cursor = 'pointer'
@@ -202,12 +326,8 @@ export function UpgradeWheel() {
   const r = R()
   const mat = { transparent: true, alphaTest: 0.02, toneMapped: false, clippingPlanes: CLIP } as const
   return (
-    <group ref={root} visible={false}>
-      {/* Сукно — отдельный фиолетовый «студийный» тон, не зелёный стол бонуса. */}
-      <mesh position={[0, 0, 0.03]}>
-        <planeGeometry args={[WIN_W, WIN_H]} />
-        <meshStandardMaterial color="#1a0c33" roughness={0.9} clippingPlanes={CLIP} />
-      </mesh>
+    // Сукно — отдельный фиолетовый «студийный» тон, не стол бонуса.
+    <MiniGameWindow phase="upgrade" startedAt={(s) => s.upgradeAt} enterDelay={ENTER_DELAY} hasContent={!!g} cloth="#1a0c33">
       {/* Прожектор за колесом. */}
       <mesh position={[0, CY(), 0.04]}>
         <circleGeometry args={[r * 1.35, 64]} />
@@ -260,16 +380,38 @@ export function UpgradeWheel() {
         </group>
       </group>
 
+      {/* Окошко над стрелкой: что под стрелкой (конверт / респин / «ушёл»), после победы — навыки. */}
+      <group ref={box} position={[0, BOX_Y(), 0.12]}>
+        <mesh>
+          <planeGeometry args={[BOX_W(), BOX_H()]} />
+          <meshBasicMaterial ref={boxMat} {...mat} />
+        </mesh>
+      </group>
+
+      {/* Плашки, летящие на табло после победы. */}
+      {Array.from({ length: FLY_MAX }, (_, i) => (
+        <mesh
+          key={i}
+          visible={false}
+          ref={(m) => {
+            chips.current[i] = m
+          }}
+        >
+          <planeGeometry args={[CHIP_W(), CHIP_H()]} />
+          <meshBasicMaterial transparent alphaTest={0.02} toneMapped={false} clippingPlanes={CLIP} />
+        </mesh>
+      ))}
+
       {/* Табло цепочки. */}
-      <mesh position={[-SIDE_X(), CY(), 0.1]}>
+      <mesh position={[-SIDE_X(), SIDE_Y(), 0.1]}>
         <planeGeometry args={[PANEL_W(), PANEL_H()]} />
         <meshBasicMaterial map={panel} {...mat} />
       </mesh>
 
       {/* Кнопки: КРУТИТЬ и ЗАБРАТЬ / НАЗАД. */}
       {[
-        { tex: spinTex, y: CY() + BTN_H() * 0.7, act: () => canSpin && spinWheel() },
-        { tex: takeTex, y: CY() - BTN_H() * 0.7, act: () => (canTake || canBack) && takeUpgrade() },
+        { tex: spinTex, y: SIDE_Y() + BTN_H() * 0.7, act: () => canSpin && spinWheel() },
+        { tex: takeTex, y: SIDE_Y() - BTN_H() * 0.7, act: () => (canTake || canBack) && takeUpgrade() },
       ].map((b, i) => (
         <group
           key={i}
@@ -278,7 +420,7 @@ export function UpgradeWheel() {
             btns.current[i] = o
           }}
           onClick={(e) => {
-            if (useGame.getState().phase !== 'upgrade') return
+            if (!inPhase('upgrade')) return
             e.stopPropagation()
             sfx.click()
             b.act()
@@ -291,6 +433,6 @@ export function UpgradeWheel() {
           </mesh>
         </group>
       ))}
-    </group>
+    </MiniGameWindow>
   )
 }

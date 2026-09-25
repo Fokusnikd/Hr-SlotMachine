@@ -1,4 +1,5 @@
 import type { Rarity } from "./types";
+import { RARITY_NAME } from "../copy";
 
 export const START_CREDITS = 1000;
 /** Ставка за одну линию выплат. Спин стоит LINE_BET × число линий. */
@@ -60,12 +61,6 @@ export function scaleForLines(table: Record<number, number>, lines: number): num
   const t = (Math.log(lines) - Math.log(lo)) / (Math.log(hi) - Math.log(lo));
   return Math.exp(Math.log(table[lo]) * (1 - t) + Math.log(table[hi]) * t);
 }
-
-const RARITY_NAME: Record<Rarity, string> = {
-  common: "Match",
-  rare: "Rare",
-  legendary: "LEGENDARY",
-};
 
 export const rarityLabel = (rarity: Rarity, matched: number) =>
   `${RARITY_NAME[rarity]} ×${matched}`;

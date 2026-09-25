@@ -8,7 +8,8 @@ import { Reel } from './Reel'
 import { BonusBoard } from './BonusBoard'
 import { UpgradeWheel } from './UpgradeWheel'
 import { Sparks } from './Sparks'
-import { iconKeyTexture, keyLabelTexture, lineTagTexture, wideLabelTexture, makeCreditsDisplay, makeLinesDisplay, makeMessageDisplay, makeStatsDisplay, signTexture } from './textures'
+import { MACHINE as TEXT } from '../copy'
+import { capLabelTexture, iconKeyTexture, keyLabelTexture, lineTagTexture, wideLabelTexture, makeCreditsDisplay, makeLinesDisplay, makeMessageDisplay, makeStatsDisplay, signTexture } from './textures'
 import { describeFilter } from '../game/store'
 import { plural, REFILL_AMOUNT } from '../game/economy'
 import { openSettings, openShortlist } from '../ui/uiState'
@@ -200,7 +201,7 @@ function OpenButton({ x }: { x: number }) {
   const group = useRef<THREE.Group>(null!)
   const pressed = useRef(0)
   const hover = useHoverCursor()
-  const label = useMemo(() => wideLabelTexture('OPEN'), [])
+  const label = useMemo(() => wideLabelTexture(TEXT.open), [])
   const col = useMemo(() => new THREE.Color(), [])
   useFrame(({ clock }, dt) => {
     const { phase, winOpen } = useGame.getState()
@@ -432,21 +433,21 @@ function StatsDisplay({ x, w }: { x: number; w: number }) {
   const h = SIGN_INNER_H
   const disp = useMemo(() => makeStatsDisplay(Math.round(w * DISPLAY_PPU), Math.round(h * DISPLAY_PPU)), [w, h])
   useEffect(() => {
-    const src = source !== 'all' ? (source === 'github' ? 'GITHUB' : 'JSON RESUME') : 'ALL SOURCES'
+    const src = source !== 'all' ? (source === 'github' ? 'GITHUB' : 'JSON RESUME') : TEXT.allSources
     const flt = filter.trim() ? ` · ${describeFilter(filter).toUpperCase()}` : ''
     const status =
       db.status === 'loading'
-        ? 'LOADING DATABASE…'
+        ? TEXT.loadingDb
         : db.status === 'demo'
-          ? `DEMO CANDIDATES · ${skillCount} ${plural(skillCount, 'SKILL', 'SKILLS', 'SKILLS')}`
-          : `${src}${flt} · ${skillCount} ${plural(skillCount, 'SKILL', 'SKILLS', 'SKILLS')}`
+          ? `${TEXT.demoCandidates} · ${skillCount} ${plural(skillCount, TEXT.skill, TEXT.skills, TEXT.skills)}`
+          : `${src}${flt} · ${skillCount} ${plural(skillCount, TEXT.skill, TEXT.skills, TEXT.skills)}`
     const dot = db.status === 'loading' ? '#ffd84a' : db.status === 'demo' ? '#ff9f43' : '#5cff9a'
     disp.draw(status, dot, [
-      { label: 'POOL', value: pool.total.toLocaleString('en-US') },
-      { label: 'ELIGIBLE', value: pool.eligible.toLocaleString('en-US') },
-      { label: 'SEEN', value: String(pool.seen) },
-      { label: 'SPINS', value: String(stats.spins) },
-      { label: 'FINDS', value: String(stats.wins) },
+      { label: TEXT.stats.pool, value: pool.total.toLocaleString('en-US') },
+      { label: TEXT.stats.eligible, value: pool.eligible.toLocaleString('en-US') },
+      { label: TEXT.stats.seen, value: String(pool.seen) },
+      { label: TEXT.stats.spins, value: String(stats.spins) },
+      { label: TEXT.stats.finds, value: String(stats.wins) },
     ])
   }, [disp, db.status, pool, filter, source, stats.spins, stats.wins, skillCount])
   return (
@@ -607,8 +608,8 @@ function Sign() {
         </mesh>
         <StatsDisplay x={leftX} w={sideW} />
         <CreditsDisplay x={rightStart + creditsW / 2} w={creditsW} />
-        <SignKey x={rightStart + creditsW + 0.1 + SIGN_KEY_W / 2} w={SIGN_KEY_W} h={SIGN_INNER_H} label={iconKeyTexture('star', 'SHORTLIST', shortlistCount)} onPress={openShortlist} />
-        <SignKey x={rightStart + creditsW + 0.2 + SIGN_KEY_W * 1.5} w={SIGN_KEY_W} h={SIGN_INNER_H} label={iconKeyTexture('gear', 'SETTINGS')} onPress={openSettings} />
+        <SignKey x={rightStart + creditsW + 0.1 + SIGN_KEY_W / 2} w={SIGN_KEY_W} h={SIGN_INNER_H} label={iconKeyTexture('star', TEXT.shortlist, shortlistCount)} onPress={openShortlist} />
+        <SignKey x={rightStart + creditsW + 0.2 + SIGN_KEY_W * 1.5} w={SIGN_KEY_W} h={SIGN_INNER_H} label={iconKeyTexture('gear', TEXT.settings)} onPress={openSettings} />
       </group>
       {bulbs.map(([x, y], i) => (
         <mesh key={i} position={[x, y, 0.32]}>
@@ -633,14 +634,15 @@ function Sign() {
 function RoundButton({
   position,
   radius,
-  sign,
+  label,
   onPress,
   enabled,
   pulse = false,
 }: {
   position: [number, number, number]
   radius: number
-  sign?: '+' | '-'
+  /** Надпись на шляпке (SPIN, −, +). */
+  label?: string
   onPress: () => void
   enabled: () => boolean
   pulse?: boolean
@@ -662,9 +664,7 @@ function RoundButton({
     cap.current.emissiveIntensity = on ? (pulse ? 1.4 + Math.sin(t * 4) * 0.6 : 0.9 + Math.sin(t * 3 + position[0]) * 0.2) : pulse ? 0.3 : 0.05
     cap.current.color.set(on || pulse ? RED : '#5a3a48')
   })
-  const glyphH = 0.03
-  const glyphY = r * 0.24 + 0.1 + glyphH / 2
-  const glyph = <meshStandardMaterial color="#ffffff" emissive="#ffffff" emissiveIntensity={0.6} />
+  const labelTex = useMemo(() => (label ? capLabelTexture(label) : null), [label])
   return (
     <group
       ref={group}
@@ -685,16 +685,11 @@ function RoundButton({
         <cylinderGeometry args={[r * 0.74, r * 0.78, r * 0.26, 40]} />
         <meshStandardMaterial ref={cap} color={RED} emissive={RED} toneMapped={false} roughness={0.3} />
       </mesh>
-      {sign && (
-        <mesh position={[0, glyphY - 0.1, 0]}>
-          <boxGeometry args={[r * 0.8, glyphH, r * 0.2]} />
-          {glyph}
-        </mesh>
-      )}
-      {sign === '+' && (
-        <mesh position={[0, glyphY - 0.1, 0]}>
-          <boxGeometry args={[r * 0.2, glyphH, r * 0.8]} />
-          {glyph}
+      {labelTex && (
+        // Лежит на верхней грани шляпки (её верх — r·0.24 + r·0.13).
+        <mesh position={[0, r * 0.37 + 0.004, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <planeGeometry args={[r * 1.35, r * 1.35]} />
+          <meshBasicMaterial map={labelTex} transparent depthWrite={false} toneMapped={false} />
         </mesh>
       )}
     </group>
@@ -771,7 +766,7 @@ function Key({
   )
 }
 
-const lineWord = (n: number) => (n === 1 ? 'LINE' : 'LINES')
+const lineWord = (n: number) => (n === 1 ? TEXT.line : TEXT.lines)
 
 /** Раскладка панели: широкий экран — один ряд, портрет — два ряда крупных клавиш. */
 function deckLayout(compact: boolean) {
@@ -827,8 +822,8 @@ function ControlDeck() {
           position={[L.auto.x, 0, L.auto.z]}
           w={L.auto.w}
           d={L.auto.d}
-          title="AUTO"
-          sub="SPIN"
+          title={TEXT.auto}
+          sub={TEXT.autoSub}
           onColor="#5cff9a"
           state={() => (st().auto ? 'on' : 'off')}
           onPress={toggleAuto}
@@ -852,18 +847,18 @@ function ControlDeck() {
         <RoundButton
           position={[L.minus.x, 0, L.minus.z]}
           radius={L.minus.r}
-          sign="-"
+          label={TEXT.minus}
           onPress={() => changeLines(-1)}
           enabled={() => idleish() && st().lines.length > minLinesFor(st().targets.length)}
         />
         <RoundButton
           position={[L.plus.x, 0, L.plus.z]}
           radius={L.plus.r}
-          sign="+"
+          label={TEXT.plus}
           onPress={() => changeLines(1)}
           enabled={() => idleish() && st().lines.length < MAX_LINES}
         />
-        <RoundButton position={[L.spin.x, 0, L.spin.z]} radius={L.spin.r} pulse onPress={spin} enabled={() => st().phase !== 'spinning' && !st().auto} />
+        <RoundButton position={[L.spin.x, 0, L.spin.z]} radius={L.spin.r} label={TEXT.spin} pulse onPress={spin} enabled={() => st().phase !== 'spinning' && !st().auto} />
       </group>
     </group>
   )

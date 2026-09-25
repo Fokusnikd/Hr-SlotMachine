@@ -160,6 +160,18 @@ export function rarityFor(matchCount: number): Rarity | null {
   return null;
 }
 
+/**
+ * Уровень относительно пула: legendary (UNICORN) — максимум совпадений, какой вообще есть в пуле
+ * под фильтром; rare (Strong match) — максимум − 1; остальное — common (Match).
+ * Если выбрано 8 навыков, а в пуле ни у кого больше 7, — UNICORN'ы только с 7.
+ */
+export function rarityInPool(matchCount: number, poolMax: number): Rarity | null {
+  if (matchCount < 3) return null;
+  if (matchCount >= poolMax) return "legendary";
+  if (matchCount === poolMax - 1) return "rare";
+  return "common";
+}
+
 /** Топ навыков среди кандидатов — список навыков «позиции» и алфавит барабанов. */
 export function topSkills(
   candidates: Candidate[],

@@ -1,4 +1,6 @@
+import { useMemo } from 'react'
 import { useGame } from '../game/store'
+import { BRAND, pick, SHORTLIST } from '../copy'
 import { getSkill } from '../game/skills'
 import { Avatar, SkillChip } from './common'
 import type { Candidate } from '../game/types'
@@ -13,7 +15,7 @@ function exportCsv(list: Candidate[]) {
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }))
   const a = document.createElement('a')
   a.href = url
-  a.download = `hrgacha-shortlist-${new Date().toISOString().slice(0, 10)}.csv`
+  a.download = `${BRAND.csvFile}-${new Date().toISOString().slice(0, 10)}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -21,13 +23,15 @@ function exportCsv(list: Candidate[]) {
 export function Shortlist({ open, onClose }: { open: boolean; onClose: () => void }) {
   const list = useGame((s) => s.shortlist)
   const remove = useGame((s) => s.removeFromShortlist)
+  // Новая фраза для пустого списка при каждом открытии.
+  const empty = useMemo(() => pick(SHORTLIST.empty), [open])
 
   return (
     <>
       <div className={`scrim ${open ? 'scrim--open' : ''}`} onClick={onClose} />
       <aside className={`drawer ${open ? 'drawer--open' : ''}`} aria-hidden={!open}>
         <div className="drawer__head">
-          <h2>⭐ Shortlist</h2>
+          <h2>{SHORTLIST.title}</h2>
           <div className="drawer__tools">
             <button className="btn btn--ghost btn--sm" disabled={!list.length} onClick={() => exportCsv(list)}>
               CSV
@@ -37,7 +41,7 @@ export function Shortlist({ open, onClose }: { open: boolean; onClose: () => voi
             </button>
           </div>
         </div>
-        {!list.length && <p className="muted drawer__empty">Nothing here yet. Spin the reels and save the ones you like.</p>}
+        {!list.length && <p className="muted drawer__empty">{empty}</p>}
         <ul className="shortlist">
           {list.map((c) => (
             <li key={c.id} className="shortlist__item">

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildWheel, chancesFor, newUpgrade, PUSH_SHARE, sectorAt, settleSpin, spinOutcome, spinWheel, WIN_CHANCE, winChance, type UpgradeGame } from './upgrade'
+import { buildWheel, chancesFor, MIN_SECTOR, PUSH_SECTORS, SECTORS, newUpgrade, PUSH_SHARE, sectorAt, settleSpin, spinOutcome, spinWheel, WIN_CHANCE, winChance, type UpgradeGame } from './upgrade'
 import type { Candidate } from './types'
 
 const cand = (id: string): Candidate => ({ id, name: `Cand ${id}`, skills: ['react'], source: 'mock', url: '' })
@@ -28,6 +28,22 @@ describe('upgrade: negotiation wheel', () => {
       expect(area('lose')).toBeCloseTo((1 - w) * (1 - PUSH_SHARE), 9)
       // Сектора идут подряд без дыр.
       for (let i = 1; i < s.length; i++) expect(s[i].start).toBeCloseTo(s[i - 1].start + s[i - 1].size, 9)
+    }
+  })
+
+  it('fewer, wider sectors: none narrower than MIN_SECTOR unless the chance itself is smaller', () => {
+    for (const g of grades) {
+      for (let seed = 1; seed < 20; seed++) {
+        const s = buildWheel(g, seeded(seed * 31 + g))
+        expect(s.length).toBeLessThan(SECTORS + 1)
+        expect(s.filter((x) => x.kind === 'push').length).toBe(PUSH_SECTORS)
+        const wins = s.filter((x) => x.kind === 'win')
+        const loses = s.filter((x) => x.kind === 'lose')
+        expect(wins.length).toBeGreaterThan(0)
+        expect(loses.length).toBeGreaterThan(0)
+        for (const x of loses) expect(x.size).toBeGreaterThan(MIN_SECTOR - 1e-9)
+        if (wins.length > 1) for (const x of wins) expect(x.size).toBeGreaterThan(MIN_SECTOR - 1e-9)
+      }
     }
   })
 
@@ -109,6 +125,26 @@ describe('upgrade: negotiation wheel', () => {
     expect(l.status).toBe('lost')
     expect(spinWheel(l)).toBe(l)
     expect(settleSpin(l, ladder)).toBe(l)
+  })
+
+  it('board skills: origin keeps its line matches, a win swaps in the target skills', () => {
+    const ladderSkills = (h: Candidate, grade: number) => ({ candidate: cand(`${h.id}+`), grade: grade + 1, skills: Array.from({ length: grade + 1 }, (_, i) => `s${i}`) })
+    const g = newUpgrade(cand('a'), 3, cand('b'), 4, seeded(9), { holder: ['s0', 's1', 's2'], next: ['s0', 's1', 's2', 's3'] })
+    expect(g.skills).toEqual(['s0', 's1', 's2'])
+    expect(g.skills.length).toBe(g.grade)
+    expect(g.prevSkills).toBeNull()
+    const winAt = g.sectors.find((s) => s.kind === 'win')!
+    const s1 = settleSpin(spinWheel(g, () => winAt.start + winAt.size / 2), ladderSkills, seeded(10))
+    expect(s1.skills).toEqual(['s0', 's1', 's2', 's3'])
+    expect(s1.prevSkills).toEqual(['s0', 's1', 's2'])
+    expect(s1.nextSkills.length).toBe(5)
+  })
+
+  it('every game gets its own id (UI tells games apart by it)', () => {
+    const a = newUpgrade(cand('a'), 5, cand('b'), 6)
+    const b = newUpgrade(cand('a'), 5, cand('b'), 6)
+    expect(a.id).not.toBe(b.id)
+    expect(spinWheel(a).id).toBe(a.id)
   })
 
   it('0% and 100% wheels have no push sectors', () => {

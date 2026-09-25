@@ -9,7 +9,8 @@ import { getSkill, normalizeSkill } from './skills'
 import { makeMockCandidates } from '../data/mockCandidates'
 import { loadDatabase } from '../data/db'
 import { bestCandidate, CONSOLATION_SPINS, HIRES_TO_WIN, newBonus, openFolder as openBonusFolder, REJECTS_TO_LOSE, type BonusGame } from './bonus'
-import { rarityFor, SCATTER } from './outcome'
+import { rarityInPool, SCATTER } from './outcome'
+import { MSG, say, WHEEL } from '../copy'
 import { chancesFor, newUpgrade, settleSpin, spinWheel as spinUpgradeWheel, WHEEL_SPIN_MS, type UpgradeGame } from './upgrade'
 
 export type Phase = 'idle' | 'spinning' | 'win' | 'bonus' | 'upgrade'
@@ -56,6 +57,8 @@ interface State {
   /** Весь пул под фильтром — все эти люди участвуют в каждом спине. */
   filtered: Candidate[]
   poolInfo: PoolInfo
+  /** Максимум совпадений с выбранными навыками во всём пуле под фильтром — это уровень UNICORN. */
+  poolMax: number
   /** Модель барабанов и группы кандидатов под текущие навыки. */
   field: Field | null
   /** Масштаб выплат для текущего числа линий (калибруется симуляцией под навыки, пул и линии). */
@@ -212,6 +215,25 @@ export function poolInfoFor(filtered: Candidate[], targets: SkillId[], excluded:
   return { total: filtered.length, eligible, seen }
 }
 
+/** Максимум совпадений с выбранными навыками во всём пуле под фильтром (включая уже выпадавших):
+ *  стабилен в течение игры и задаёт шкалу уровней — UNICORN = этот максимум. */
+export function poolMaxFor(filtered: Candidate[], targets: SkillId[]): number {
+  const t = new Set(targets)
+  let max = 0
+  for (const c of filtered) max = Math.max(max, countTargets(c, t))
+  return max
+}
+
+const RARITY_ORDER: Rarity[] = ['common', 'rare', 'legendary']
+
+/** Пересчитать уровни выигрышей спина относительно максимума пула (spinField считает по абсолютной шкале). */
+export function withPoolRarity(r: SpinResult, poolMax: number): SpinResult {
+  if (!r.wins.length) return r
+  const wins = r.wins.map((w) => ({ ...w, rarity: rarityInPool(w.matched.length, poolMax) ?? w.rarity }))
+  const rarity = wins.reduce<Rarity>((best, w) => (RARITY_ORDER.indexOf(w.rarity) > RARITY_ORDER.indexOf(best) ? w.rarity : best), 'common')
+  return { ...r, wins, rarity }
+}
+
 function haystack(c: Candidate) {
   return [c.name, c.title, c.location, c.company, c.bio].filter(Boolean).join(' ').toLowerCase()
 }
@@ -267,6 +289,7 @@ export const useGame = create<State>((set, get) => {
       settings,
       filtered,
       poolInfo: poolInfoFor(filtered, targets, new Set(excluded)),
+      poolMax: poolMaxFor(filtered, targets),
       pool,
       roleSkills,
       targets,
@@ -304,7 +327,7 @@ export const useGame = create<State>((set, get) => {
     const left = (s.result?.wins.length ?? 0) - next
     if (left > 0) {
       const w = s.result!.wins[next]
-      set({ winIndex: next, message: `${note} ${left} more: ${w.candidate.name} ×${w.matched.length}` })
+      set({ winIndex: next, message: MSG.nextUp(note, left, w.candidate.name, w.matched.length) })
     } else {
       set({ winIndex: next })
       afterWins(note)
@@ -313,7 +336,7 @@ export const useGame = create<State>((set, get) => {
 
   const bonusStatus = (g: BonusGame) => {
     const shields = g.shields - g.blocked.length
-    return `Match ${g.hires}/${HIRES_TO_WIN} · Miss ${g.rejects}/${REJECTS_TO_LOSE}${g.shields ? ` · Shields ${shields}/${g.shields}` : ''}`
+    return MSG.bonusStatus({ hires: g.hires, needHires: HIRES_TO_WIN, rejects: g.rejects, maxRejects: REJECTS_TO_LOSE, shields: g.shields ? MSG.bonusShieldsLeft(shields, g.shields) : '' })
   }
 
   let finishTimer: ReturnType<typeof setTimeout> | undefined
@@ -330,10 +353,11 @@ export const useGame = create<State>((set, get) => {
     const pool = upgradeCandidates(s.filtered, s.targets, skip, holder.id, grade)
     if (!pool.length) return null
     const candidate = pool[Math.floor(Math.random() * pool.length)]
-    return { candidate, grade: countTargets(candidate, new Set(s.targets)) }
+    const skills = matchedSkills(candidate)
+    return { candidate, grade: skills.length, skills }
   }
 
-  const wheelOdds = (g: UpgradeGame) => `${Math.round(chancesFor(g.grade).win)}% to sign`
+  const wheelOdds = (g: UpgradeGame) => WHEEL.odds(Math.round(chancesFor(g.grade).win))
 
   /** Совпавшие навыки кандидата (id, без повторов) — на колесе показываем их, а не имена людей. */
   const matchedSkills = (c: Candidate) => {
@@ -342,8 +366,8 @@ export const useGame = create<State>((set, get) => {
   }
   /** Навыки, которые добавила последняя победа по сравнению с предыдущим держателем. */
   const freshSkills = (g: UpgradeGame) => {
-    const before = new Set(g.prev ? matchedSkills(g.prev) : [])
-    return matchedSkills(g.holder)
+    const before = new Set(g.prevSkills ?? [])
+    return g.skills
       .filter((sk) => !before.has(sk))
       .map((sk) => getSkill(sk).label)
   }
@@ -354,15 +378,15 @@ export const useGame = create<State>((set, get) => {
     if (s.phase !== 'upgrade' || !s.upgrade || s.upgrade.status !== 'spinning') return
     const g = settleSpin(s.upgrade, pickUpgradeTarget)
     let message: string
-    if (g.last === 'push') message = `They're haggling — free respin! ${g.grade}★ → ${g.nextGrade}★ · ${wheelOdds(g)}.`
-    else if (g.status === 'lost') message = `Red! The candidate walks away${g.step ? ` and the whole ${g.step}-step chain is gone` : ''}.`
+    if (g.last === 'push') message = say(MSG.push, { from: g.grade, to: g.nextGrade, odds: wheelOdds(g) })
+    else if (g.status === 'lost') message = say(MSG.lost, g.step ? MSG.lostChain(g.step) : '')
     else {
       const fresh = freshSkills(g)
       const plus = fresh.length ? ` +${fresh.join(', +')}` : ''
       message =
         g.status === 'max'
-          ? `Signed! ×${g.grade}${plus} — ★ MAXIMUM, nobody stronger in the pool. TAKE it!`
-          : `Signed! ×${g.grade}${plus}. TAKE it or risk it all: ${g.grade}★ → ${g.nextGrade}★ · ${wheelOdds(g)}.`
+          ? say(g.grade >= get().poolMax ? MSG.signedUnicorn : MSG.signedMaxLeft, g.grade, plus)
+          : say(MSG.signed, { from: g.grade, to: g.nextGrade, odds: wheelOdds(g), plus })
     }
     set({ upgrade: g, message })
     if (g.status === 'lost') {
@@ -385,7 +409,7 @@ export const useGame = create<State>((set, get) => {
       bonusAt: performance.now(),
       pendingBonus: 0,
       bonusConsolation: CONSOLATION_SPINS * spinCost(s.result?.lines.length ?? s.lines.length),
-      message: `GOLDEN FOLDER ×${scatters}! Open the folders: 3 "Match" — a candidate, 3 "Miss" — a consolation prize.${bonus.shields ? ` Shields against "Miss": ${bonus.shields}` : ''}`,
+      message: say(MSG.bonusStart, scatters) + (bonus.shields ? MSG.bonusShields(bonus.shields) : ''),
     })
   }
 
@@ -398,8 +422,13 @@ export const useGame = create<State>((set, get) => {
     const total = r.wins.reduce((a, w) => a + payoutFor(w.matched.length, scale), 0)
     const w = r.wins[0]
     return n === 1
-      ? `${w.matched.length} ${plural(w.matched.length, 'skill', 'skills', 'skills')} matched on ${w.lineIds.length > 1 ? 'lines' : 'line'} ${describeLines(w.lineIds)} — ${w.candidate.name}! OPEN — card, SPIN — exchange for +${total} ◎`
-      : `${n} ${plural(n, 'person', 'people', 'people')} appeared, best ×${w.matched.length} — ${w.candidate.name}! OPEN — cards, SPIN — exchange all for +${total} ◎`
+      ? say(MSG.winOne, {
+          skills: `${w.matched.length} ${plural(w.matched.length, 'skill', 'skills', 'skills')}`,
+          where: `${w.lineIds.length > 1 ? 'lines' : 'line'} ${describeLines(w.lineIds)}`,
+          name: w.candidate.name,
+          total,
+        })
+      : say(MSG.winMany, { people: `${n} ${plural(n, 'person', 'people', 'people')}`, best: w.matched.length, name: w.candidate.name, total })
   }
 
   const markUsed = (c: Candidate) => {
@@ -415,11 +444,12 @@ export const useGame = create<State>((set, get) => {
     spinId: 0,
     stoppedReels: 0,
     result: null,
-    message: 'Loading candidate database…',
+    message: say(MSG.loading),
 
     all: [],
     filtered: [],
     poolInfo: { total: 0, eligible: 0, seen: 0 },
+    poolMax: 0,
     field: null,
     payScale: 4,
     payTable: {},
@@ -461,18 +491,18 @@ export const useGame = create<State>((set, get) => {
             generatedAt: db.generatedAt,
             counts: { all: db.candidates.length, jsonresume: db.counts.jsonresume, github: db.counts.github },
           },
-          message: 'Press SPIN or Space — time to find talent!',
+          message: say(MSG.ready),
         })
       } else {
         set({
           all: demo,
           settings: { ...get().settings, source: 'all' },
           db: { status: 'demo', counts: { all: demo.length, jsonresume: 0, github: 0 } },
-          message: 'Database not built — playing on demo candidates',
+          message: MSG.demo,
         })
       }
       rebuild()
-      if (!get().poolInfo.eligible) set({ message: 'No one matches this filter — change it in settings ⚙' })
+      if (!get().poolInfo.eligible) set({ message: say(MSG.noMatch) })
     },
 
     spin: () => {
@@ -495,7 +525,7 @@ export const useGame = create<State>((set, get) => {
       if (s.phase === 'win' && s.result) {
         const left = s.result.wins.slice(s.winIndex)
         const gain = left.reduce((a, w) => a + payoutFor(w.matched.length, s.winScale), 0)
-        exchangedNote = `${left.length > 1 ? `${left.length} ${plural(left.length, 'person', 'people', 'people')}` : left[0].candidate.name} → +${gain} ◎. `
+        exchangedNote = MSG.autoExchanged(left.length > 1 ? `${left.length} ${plural(left.length, 'person', 'people', 'people')}` : left[0].candidate.name, gain)
         set({
           credits: s.credits + gain,
           excluded: [...s.excluded, ...left.map((w) => w.candidate.id)],
@@ -509,14 +539,14 @@ export const useGame = create<State>((set, get) => {
       }
       if (s.phase !== 'idle') return false
       if (s.credits < s.cost) {
-        set({ auto: false, message: 'Out of credits — ask HRD for budget (button up top)' })
+        set({ auto: false, message: say(MSG.outOfCredits) })
         return false
       }
       if (!s.poolInfo.eligible) {
-        set({ auto: false, message: 'No more candidates for this filter — change the filter or reset progress ⚙' })
+        set({ auto: false, message: say(MSG.poolDrained) })
         return false
       }
-      const result = spinField(s.field!, s.lines.length, { exclude: new Set(s.excluded) })
+      const result = withPoolRarity(spinField(s.field!, s.lines.length, { exclude: new Set(s.excluded) }), s.poolMax)
       set({
         credits: s.credits - s.cost,
         phase: 'spinning',
@@ -529,7 +559,7 @@ export const useGame = create<State>((set, get) => {
         pendingBonus: 0,
         bonus: null,
         upgradeApplied: {},
-        message: exchangedNote + (s.auto ? 'Auto-spin: spinning…' : 'Spinning…'),
+        message: exchangedNote + say(s.auto ? MSG.autoSpinning : MSG.spinning),
         stats: { ...s.stats, spins: s.stats.spins + 1 },
       })
       persist()
@@ -549,12 +579,12 @@ export const useGame = create<State>((set, get) => {
       if (r.bonus) {
         // Бонус — первым: кандидаты по линиям ждут в result.wins и покажутся после миниигры.
         // Автозапуск останавливается: миниигра требует кликов игрока.
-        const waiting = n ? ` Bonus first — ${n} ${plural(n, 'candidate', 'candidates', 'candidates')} from the lines ${n > 1 ? 'are' : 'is'} waiting after it.` : ''
+        const waiting = n ? MSG.bonusWaiting(`${n} ${plural(n, 'candidate', 'candidates', 'candidates')}`, n > 1 ? 'are' : 'is') : ''
         set({
           auto: false,
           pendingBonus: r.bonus,
           stoppedReels: stopped,
-          message: `GOLDEN FOLDER ×${r.bonus}!${waiting}`,
+          message: MSG.bonusIncoming(r.bonus, waiting),
           ...(n ? { stats: { ...s.stats, wins: s.stats.wins + n } } : {}),
         })
         // Пауза: папки на барабанах успевают перевернуться на «ПРИНЯТ».
@@ -566,9 +596,9 @@ export const useGame = create<State>((set, get) => {
         // Автозапуск останавливается на кандидате.
         set({ auto: false, winAt: performance.now(), stoppedReels: stopped, phase: 'win', winIndex: 0, message: winsText(r, s.winScale), stats: { ...s.stats, wins: s.stats.wins + n } })
       } else if (r.nearMiss) {
-        set({ stoppedReels: stopped, phase: 'idle', message: `Almost! 2 skills for ${r.nearMiss.candidate.name}. One more spin?` })
+        set({ stoppedReels: stopped, phase: 'idle', message: say(MSG.nearMiss, r.nearMiss.candidate.name) })
       } else {
-        set({ stoppedReels: stopped, phase: 'idle', message: 'Miss. Talent is out there somewhere…' })
+        set({ stoppedReels: stopped, phase: 'idle', message: say(MSG.miss) })
       }
       persist()
       if (!n && get().auto) {
@@ -586,7 +616,7 @@ export const useGame = create<State>((set, get) => {
       const gain = payoutFor(w.matched.length, s.winScale)
       set({ credits: s.credits + gain, stats: { ...s.stats, exchanged: s.stats.exchanged + 1 } })
       markUsed(w.candidate)
-      advance(`+${gain} credits for ${w.candidate.name}.`)
+      advance(say(MSG.exchange, w.candidate.name, gain))
       persist()
     },
 
@@ -597,11 +627,11 @@ export const useGame = create<State>((set, get) => {
       const already = s.shortlist.some((c) => c.id === w.candidate.id)
       set({ shortlist: already ? s.shortlist : [w.candidate, ...s.shortlist] })
       markUsed(w.candidate)
-      advance(`${w.candidate.name} added to shortlist ⭐`)
+      advance(say(MSG.keep, w.candidate.name))
       persist()
     },
     refill: () => {
-      set((s) => ({ credits: s.credits + REFILL_AMOUNT, message: `HRD granted +${REFILL_AMOUNT} credits` }))
+      set((s) => ({ credits: s.credits + REFILL_AMOUNT, message: say(MSG.refill, REFILL_AMOUNT) }))
       persist()
     },
 
@@ -628,8 +658,14 @@ export const useGame = create<State>((set, get) => {
         const { poolInfo, targets, lines, cost } = get()
         set({
           message: poolInfo.eligible
-            ? `Pool: ${poolInfo.total} · eligible ${poolInfo.eligible} · ${targets.length} ${plural(targets.length, 'skill', 'skills', 'skills')}, ${lines.length} ${plural(lines.length, 'line', 'lines', 'lines')}, spin ${cost} ◎`
-            : 'No one matches this filter — loosen the conditions ⚙',
+            ? MSG.poolSummary({
+                total: poolInfo.total,
+                eligible: poolInfo.eligible,
+                skills: `${targets.length} ${plural(targets.length, 'skill', 'skills', 'skills')}`,
+                lines: `${lines.length} ${plural(lines.length, 'line', 'lines', 'lines')}`,
+                cost,
+              })
+            : say(MSG.noMatch),
         })
       }
     },
@@ -639,19 +675,19 @@ export const useGame = create<State>((set, get) => {
       if (s.phase === 'spinning' || s.phase === 'bonus' || s.phase === 'upgrade') return
       const min = minLinesFor(s.targets.length)
       if (count < min) {
-        set({ message: `${s.targets.length} ${plural(s.targets.length, 'skill', 'skills', 'skills')} need at least ${min} ${plural(min, 'line', 'lines', 'lines')}` })
+        set({ message: MSG.minLines(`${s.targets.length} ${plural(s.targets.length, 'skill', 'skills', 'skills')}`, `${min} ${plural(min, 'line', 'lines', 'lines')}`) })
         return
       }
       const next = Math.min(MAX_LINES, count)
       if (next !== s.lines.length) get().updateSettings({ lines: next })
       else set({ linesChangedAt: performance.now() })
-      set({ message: `${next} ${plural(next, 'line', 'lines', 'lines')} · spin ${get().cost} ◎` })
+      set({ message: MSG.linesSet(`${next} ${plural(next, 'line', 'lines', 'lines')}`, get().cost) })
     },
 
     toggleAuto: () => {
       const s = get()
       if (s.auto) {
-        set({ auto: false, message: 'Auto-spin stopped' })
+        set({ auto: false, message: say(MSG.autoStopped) })
         return
       }
       set({ auto: true })
@@ -671,12 +707,12 @@ export const useGame = create<State>((set, get) => {
       const next = Math.min(MAX_LINES, Math.max(min, s.lines.length + delta))
       if (next === s.lines.length) {
         set({ linesChangedAt: performance.now() })
-        if (delta < 0) set({ message: `${s.targets.length} ${plural(s.targets.length, 'skill', 'skills', 'skills')} need at least ${min} ${plural(min, 'line', 'lines', 'lines')}` })
+        if (delta < 0) set({ message: MSG.minLines(`${s.targets.length} ${plural(s.targets.length, 'skill', 'skills', 'skills')}`, `${min} ${plural(min, 'line', 'lines', 'lines')}`) })
         return
       }
       get().updateSettings({ lines: next })
       const { cost } = get()
-      set({ message: `${next} ${plural(next, 'line', 'lines', 'lines')} · spin ${cost} ◎` })
+      set({ message: MSG.linesSet(`${next} ${plural(next, 'line', 'lines', 'lines')}`, cost) })
     },
 
     openFolder: (index) => {
@@ -686,7 +722,7 @@ export const useGame = create<State>((set, get) => {
       const g = openBonusFolder(s.bonus, index)
       if (g === s.bonus) return
       const f = g.board[index]
-      const note = f === 'hire' ? 'MATCH!' : f === 'empty' ? 'Empty.' : g.blocked.includes(index) ? 'Miss — but a shield saved it!' : 'MISS.'
+      const note = say(f === 'hire' ? MSG.folderMatch : f === 'empty' ? MSG.folderEmpty : g.blocked.includes(index) ? MSG.folderShield : MSG.folderMiss)
       if (g.status === 'play') {
         set({ bonus: g, message: `${note} ${bonusStatus(g)}` })
         return
@@ -696,8 +732,8 @@ export const useGame = create<State>((set, get) => {
         // Кандидаты по линиям этого спина ещё не разобраны — приз не должен их дублировать.
         const prize = bestCandidate(s.filtered, s.targets, new Set([...s.excluded, ...r.wins.map((w) => w.candidate.id)]))
         if (prize) {
-          set({ bonus: g, bonusPrize: null, message: `WIN! ${prize.candidate.name} — ${prize.matched.length} of ${s.targets.length} skills. Opening the card…` })
-          const rarity = rarityFor(prize.matched.length) ?? 'common'
+          set({ bonus: g, bonusPrize: null, message: say(MSG.bonusPrize, prize.candidate.name, prize.matched.length, s.targets.length) })
+          const rarity = rarityInPool(prize.matched.length, s.poolMax) ?? 'common'
           // Приз миниигры — первым, за ним кандидаты по линиям этого спина.
           const wins: SpinResult['wins'] = [{ candidate: prize.candidate, matched: prize.matched, lineIds: [], cells: r.scatters, rarity, fromBonus: true }, ...r.wins]
           const cellKeys = new Set<string>()
@@ -726,7 +762,7 @@ export const useGame = create<State>((set, get) => {
       set({
         bonus: g.status === 'won' ? { ...g, status: 'lost' } : g,
         credits: s.credits + gain,
-        message: g.status === 'won' ? `No matching candidates left — consolation prize +${gain} ◎` : `Three misses… Consolation prize +${gain} ◎`,
+        message: g.status === 'won' ? MSG.consolationEmpty(gain) : say(MSG.consolationMiss, gain),
       })
       persist()
       clearTimeout(finishTimer)
@@ -755,13 +791,13 @@ export const useGame = create<State>((set, get) => {
           upgradeApplied: {},
           stats: { ...s.stats, wins: s.stats.wins + 1 },
           message: more
-            ? `Golden Folder: ${w.candidate.name} ×${w.matched.length}! Then ${more} more from the lines. SPIN — exchange all for +${result.wins.reduce((a, ww) => a + payoutFor(ww.matched.length, s.winScale), 0)} ◎`
-            : `Golden Folder: ${w.candidate.name} ×${w.matched.length}! SPIN — exchange for +${payoutFor(w.matched.length, s.winScale)} ◎`,
+            ? MSG.goldenMore(w.candidate.name, w.matched.length, more, result.wins.reduce((a, ww) => a + payoutFor(ww.matched.length, s.winScale), 0))
+            : MSG.goldenOne(w.candidate.name, w.matched.length, payoutFor(w.matched.length, s.winScale)),
         })
       } else if (s.result?.wins.length) {
         // Бонус проигран, но по линиям выпали люди — теперь их можно смотреть.
-        set({ phase: 'win', winIndex: 0, winAt: performance.now(), winOpen: false, bonus: null, bonusPrize: null, upgradeApplied: {}, message: `Bonus over. ${winsText(s.result, s.winScale)}` })
-      } else set({ phase: 'idle', bonus: null, bonusPrize: null, message: 'Bonus over. Keep spinning!' })
+        set({ phase: 'win', winIndex: 0, winAt: performance.now(), winOpen: false, bonus: null, bonusPrize: null, upgradeApplied: {}, message: MSG.bonusOverWith(winsText(s.result, s.winScale)) })
+      } else set({ phase: 'idle', bonus: null, bonusPrize: null, message: say(MSG.bonusOver) })
       persist()
     },
 
@@ -773,9 +809,12 @@ export const useGame = create<State>((set, get) => {
       // Апгрейдится КАРТОЧКА, а не сам кандидат: при победе текущий кандидат целиком заменяется
       // на другого, честно подобранного заранее из пула со следующим уровнем матча.
       if (s.upgradeApplied[s.winIndex]) return
-      const nx = pickUpgradeTarget(w.candidate, w.matched.length, [])
+      // Грейд и навыки исходной карточки — те, что сложились на линиях (как звёзды в карточке),
+      // а не все навыки кандидата из набора.
+      const own = [...new Set(w.matched)]
+      const nx = pickUpgradeTarget(w.candidate, own.length, [])
       if (!nx) return
-      const g = newUpgrade(w.candidate, w.matched.length, nx.candidate, nx.grade)
+      const g = newUpgrade(w.candidate, own.length, nx.candidate, nx.grade, Math.random, { holder: own, next: nx.skills })
       clearTimeout(upgradeTimer)
       set({
         phase: 'upgrade',
@@ -783,7 +822,7 @@ export const useGame = create<State>((set, get) => {
         winOpen: false,
         upgrade: g,
         upgradeAt: performance.now(),
-        message: `Negotiation wheel ${g.grade}★ → ${nx.grade}★ · ${wheelOdds(g)}. Green — they sign, yellow — free respin, red — they walk and you lose everything.`,
+        message: say(MSG.wheelStart, { from: g.grade, to: nx.grade, odds: wheelOdds(g) }),
       })
     },
 
@@ -792,7 +831,7 @@ export const useGame = create<State>((set, get) => {
       if (s.phase !== 'upgrade' || !s.upgrade) return
       const g = spinUpgradeWheel(s.upgrade)
       if (g === s.upgrade) return
-      set({ upgrade: g, message: `Negotiating ${g.grade}★ → ${g.nextGrade}★…` })
+      set({ upgrade: g, message: say(MSG.negotiating, { from: g.grade, to: g.nextGrade, odds: wheelOdds(g) }) })
       clearTimeout(upgradeTimer)
       upgradeTimer = setTimeout(settleWheel, WHEEL_SPIN_MS)
     },
@@ -805,14 +844,13 @@ export const useGame = create<State>((set, get) => {
       const w = s.result?.wins[s.winIndex]
       if (!g.step || !s.result || !w) {
         // Ни одной ступени не пройдено — просто отказ от торга, карточка остаётся как была.
-        set({ phase: 'win', winOpen: true, upgrade: null, message: w ? `${w.candidate.name} stays at ×${w.matched.length}.` : '' })
+        set({ phase: 'win', winOpen: true, upgrade: null, message: w ? say(MSG.stays, w.candidate.name, w.matched.length) : '' })
         return
       }
       // Исходный кандидат и промежуточные ступени больше не выпадут; держатель показывается в карточке.
       const holder = g.holder
-      const targetSet = new Set(s.targets)
-      const matched = [...new Set(holder.skills.filter((sk) => targetSet.has(sk)))]
-      const rarity = rarityFor(matched.length) ?? w.rarity
+      const matched = g.skills
+      const rarity = rarityInPool(matched.length, s.poolMax) ?? w.rarity
       const wins = s.result.wins.map((ww, i) => (i === s.winIndex ? { ...w, candidate: holder, matched, rarity } : ww))
       const used = [g.originId, ...g.passed.slice(0, -1).map((c) => c.id)]
       set({
@@ -822,7 +860,7 @@ export const useGame = create<State>((set, get) => {
         phase: 'win',
         winOpen: true,
         upgrade: null,
-        message: `Deal! ${g.step > 1 ? `${g.step} steps up — ` : ''}${holder.name} ×${matched.length}.`,
+        message: say(MSG.deal, g.step > 1 ? MSG.dealSteps(g.step) : '', holder.name, matched.length),
       })
       refreshPool()
       persist()
@@ -845,14 +883,14 @@ export const useGame = create<State>((set, get) => {
         // Возвращаемся в фазу 'win' — advance() ожидает её (как после exchange/keep) и либо
         // покажет следующего кандидата этого спина, либо (через afterWins) уйдёт в 'idle'/бонус.
         set({ phase: 'win', winOpen: true })
-        advance(`The candidate walked away${g.step ? ` — ${g.step} ${plural(g.step, 'step', 'steps', 'steps')} lost` : ''}. No deal.`)
+        advance(say(MSG.walkedAway, g.step ? MSG.walkedChain(`${g.step} ${plural(g.step, 'step', 'steps', 'steps')}`) : ''))
       } else set({ phase: 'idle', winOpen: false })
       persist()
     },
 
     resetProgress: () => {
       if (get().phase === 'spinning') return
-      set({ credits: START_CREDITS, excluded: [], stats: { spins: 0, wins: 0, exchanged: 0 }, phase: 'idle', winOpen: false, message: 'Progress reset. Good luck!' })
+      set({ credits: START_CREDITS, excluded: [], stats: { spins: 0, wins: 0, exchanged: 0 }, phase: 'idle', winOpen: false, message: say(MSG.reset) })
       refreshPool()
       persist()
     },

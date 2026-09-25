@@ -2,6 +2,7 @@ import * as THREE from 'three'
 import { getSkill } from '../game/skills'
 import type { SkillId } from '../game/types'
 import { SCATTER } from '../game/outcome'
+import { BRAND, FOLDERS, MACHINE, pick, sayStable, WHEEL } from '../copy'
 
 const FONT = '"Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif'
 const cache = new Map<string, THREE.CanvasTexture>()
@@ -110,19 +111,21 @@ export function signTexture(): THREE.CanvasTexture {
 
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
-  ctx.font = `900 132px ${FONT}`
+  fitFont(ctx, BRAND.name, 900, 132, W - 70)
   ctx.shadowColor = '#ff3fd8'
   ctx.shadowBlur = 40
   ctx.fillStyle = '#ffd6f7'
-  ctx.fillText('HR GACHA', W / 2, H / 2 - 18)
+  ctx.fillText(BRAND.name, W / 2, H / 2 - 18)
   ctx.shadowBlur = 16
-  ctx.fillText('HR GACHA', W / 2, H / 2 - 18)
+  ctx.fillText(BRAND.name, W / 2, H / 2 - 18)
 
   ctx.shadowColor = '#3ff6ff'
   ctx.shadowBlur = 18
-  ctx.font = `700 38px ${FONT}`
+  // Подзаголовок — случайный при загрузке, разрядка букв как у неоновой вывески.
+  const tagline = [...pick(BRAND.taglines)].map((ch) => (ch === ' ' ? '  ' : ch)).join(' ')
+  fitFont(ctx, tagline, 700, 38, W - 60)
   ctx.fillStyle = '#c9fbff'
-  ctx.fillText('T A L E N T   S L O T   M A C H I N E', W / 2, H - 42)
+  ctx.fillText(tagline, W / 2, H - 42)
 
   const tex = finish(canvas)
   cache.set('__sign', tex)
@@ -145,10 +148,12 @@ export function panelTexture(): THREE.CanvasTexture {
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
   ctx.fillStyle = '#ffcf4a'
-  ctx.fillText('3+ skills in combo = candidate', 40, 52)
+  ctx.fillText(MACHINE.rule, 40, 52)
   ctx.fillStyle = '#9fe8ff'
   ctx.font = `600 34px ${FONT}`
-  ctx.fillText('crossing lines stack', 40, 112)
+  const joke = pick(MACHINE.ruleJokes)
+  fitFont(ctx, joke, 600, 34, W - 60)
+  ctx.fillText(joke, 40, 112)
   const tex = finish(canvas)
   cache.set('__panel', tex)
   return tex
@@ -188,8 +193,8 @@ export function makeLinesDisplay(W = 552, H = 120) {
       ctx.fillText(value, cx, H * 0.66)
       ctx.shadowBlur = 0
     }
-    cell(W / 4, auto ? 'LINES · AUTO' : 'LINES', String(lines), auto ? '#5cff9a' : '#ffd6f7')
-    cell((W * 3) / 4, 'BET', `${cost} ◎`, '#ffd84a')
+    cell(W / 4, auto ? MACHINE.linesAutoLabel : MACHINE.linesLabel, String(lines), auto ? '#5cff9a' : '#ffd6f7')
+    cell((W * 3) / 4, MACHINE.betLabel, `${cost} ◎`, '#ffd84a')
     tex.needsUpdate = true
   }
   return { tex, draw }
@@ -331,6 +336,32 @@ export function wideLabelTexture(text: string): THREE.CanvasTexture {
     ctx.font = `900 ${px}px ${FONT}`
   }
   ctx.fillText(text, W / 2, H / 2 + 4)
+  const tex = finish(canvas)
+  cache.set(key, tex)
+  return tex
+}
+
+/** Надпись на шляпке круглой кнопки (SPIN, −, +): белая, с тёмной обводкой, на прозрачном фоне. */
+export function capLabelTexture(text: string): THREE.CanvasTexture {
+  const key = `__cap${text}`
+  const hit = cache.get(key)
+  if (hit) return hit
+  const W = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = W
+  const ctx = canvas.getContext('2d')!
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const px = fitFont(ctx, text, 900, text.length <= 1 ? 190 : 84, W - 36)
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = Math.max(8, px * 0.1)
+  ctx.strokeStyle = 'rgba(70,0,20,0.85)'
+  ctx.strokeText(text, W / 2, W / 2 + px * 0.04)
+  ctx.fillStyle = '#ffffff'
+  ctx.shadowColor = '#ffffff'
+  ctx.shadowBlur = 8
+  ctx.fillText(text, W / 2, W / 2 + px * 0.04)
   const tex = finish(canvas)
   cache.set(key, tex)
   return tex
@@ -504,11 +535,11 @@ export function scatterTexture(): THREE.CanvasTexture {
   ctx.textBaseline = 'middle'
   ctx.font = `900 84px ${FONT}`
   ctx.fillStyle = 'rgba(90,40,0,0.45)'
-  ctx.fillText('MATCH', W / 2 + 3, 176)
+  ctx.fillText(FOLDERS.match, W / 2 + 3, 176)
   ctx.fillStyle = '#fffbe6'
   ctx.shadowColor = '#7a4300'
   ctx.shadowBlur = 6
-  ctx.fillText('MATCH', W / 2, 172)
+  ctx.fillText(FOLDERS.match, W / 2, 172)
   ctx.shadowBlur = 0
   // Звёздочка-искра
   const star = (cx: number, cy: number, r: number) => {
@@ -537,7 +568,7 @@ export function folderFrontTexture(n: number): THREE.CanvasTexture {
     ctx.textBaseline = 'middle'
     ctx.font = `900 40px ${FONT}`
     ctx.fillStyle = 'rgba(90,40,0,0.75)'
-    ctx.fillText('RESUME', 200, 120)
+    ctx.fillText(FOLDERS.front, 200, 120)
     ctx.font = `900 64px ${FONT}`
     ctx.fillStyle = '#fffbe6'
     ctx.shadowColor = '#7a4300'
@@ -567,11 +598,11 @@ export function folderBackTexture(kind: 'hire' | 'reject' | 'empty' | 'shield'):
       ctx.textBaseline = 'middle'
       ctx.font = `800 46px ${FONT}`
       ctx.fillStyle = '#8a8274'
-      ctx.fillText('empty', 200, 150)
+      ctx.fillText(FOLDERS.empty, 200, 150)
       return
     }
     const color = kind === 'hire' ? '#12a64a' : kind === 'reject' ? '#e0243a' : '#2a8cf0'
-    const text = kind === 'hire' ? 'MATCH' : kind === 'reject' ? 'MISS' : 'SHIELD'
+    const text = kind === 'hire' ? FOLDERS.match : kind === 'reject' ? FOLDERS.miss : FOLDERS.shield
     ctx.save()
     ctx.translate(200, 150)
     ctx.rotate(-0.2)
@@ -595,7 +626,7 @@ export function folderBackTexture(kind: 'hire' | 'reject' | 'empty' | 'shield'):
       ctx.font = `800 30px ${FONT}`
       ctx.textAlign = 'center'
       ctx.fillStyle = '#e0243a'
-      ctx.fillText('miss', 0, 0)
+      ctx.fillText(FOLDERS.shieldBroken, 0, 0)
       ctx.fillRect(-48, -2, 96, 5)
       ctx.restore()
     }
@@ -632,8 +663,8 @@ export function acceptedTexture(): THREE.CanvasTexture {
     ctx.textBaseline = 'middle'
     let px = 92
     ctx.font = `900 ${px}px ${FONT}`
-    while (ctx.measureText('FOUND').width > 330 && px > 40) ctx.font = `900 ${(px -= 2)}px ${FONT}`
-    ctx.fillText('FOUND', 0, 6)
+    while (ctx.measureText(MACHINE.scatterStamp).width > 330 && px > 40) ctx.font = `900 ${(px -= 2)}px ${FONT}`
+    ctx.fillText(MACHINE.scatterStamp, 0, 6)
     ctx.restore()
   })
 }
@@ -649,9 +680,134 @@ const WHEEL_COLORS: Record<'win' | 'push' | 'lose', [string, string, string]> = 
 }
 const WHEEL_ICONS = { win: '✔', push: '↻', lose: '✕' }
 
+/** Запечатанный конверт с центром в (0, 0): клапан сверху, сургучная печать. */
+function drawEnvelope(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  const r = Math.max(3, w * 0.05)
+  // Тень под конвертом.
+  ctx.fillStyle = 'rgba(6,40,24,0.4)'
+  roundRect(ctx, -w / 2 + w * 0.03, -h / 2 + h * 0.07, w, h, r)
+  ctx.fill()
+  // Бумага.
+  const paper = ctx.createLinearGradient(0, -h / 2, 0, h / 2)
+  paper.addColorStop(0, '#fffaf0')
+  paper.addColorStop(1, '#eedcb8')
+  roundRect(ctx, -w / 2, -h / 2, w, h, r)
+  ctx.fillStyle = paper
+  ctx.fill()
+  ctx.lineWidth = Math.max(2, w * 0.02)
+  ctx.strokeStyle = '#a88a55'
+  ctx.stroke()
+  // Нижние сгибы.
+  ctx.strokeStyle = 'rgba(150,115,60,0.5)'
+  ctx.lineWidth = Math.max(1.5, w * 0.015)
+  ctx.beginPath()
+  ctx.moveTo(-w / 2 + r * 0.6, h / 2 - r * 0.6)
+  ctx.lineTo(-w * 0.07, h * 0.04)
+  ctx.moveTo(w / 2 - r * 0.6, h / 2 - r * 0.6)
+  ctx.lineTo(w * 0.07, h * 0.04)
+  ctx.stroke()
+  // Клапан.
+  ctx.beginPath()
+  ctx.moveTo(-w / 2 + r * 0.4, -h / 2 + r * 0.4)
+  ctx.lineTo(0, h * 0.14)
+  ctx.lineTo(w / 2 - r * 0.4, -h / 2 + r * 0.4)
+  ctx.closePath()
+  const flap = ctx.createLinearGradient(0, -h / 2, 0, h * 0.14)
+  flap.addColorStop(0, '#fbf0d8')
+  flap.addColorStop(1, '#e6d0a4')
+  ctx.fillStyle = flap
+  ctx.fill()
+  ctx.lineWidth = Math.max(2, w * 0.018)
+  ctx.strokeStyle = '#a88a55'
+  ctx.stroke()
+  // Сургуч.
+  const sr = Math.min(w, h) * 0.17
+  const sy = h * 0.1
+  const wax = ctx.createRadialGradient(-sr * 0.3, sy - sr * 0.3, sr * 0.1, 0, sy, sr)
+  wax.addColorStop(0, '#ff5a64')
+  wax.addColorStop(1, '#a3121f')
+  ctx.beginPath()
+  ctx.arc(0, sy, sr, 0, Math.PI * 2)
+  ctx.fillStyle = wax
+  ctx.fill()
+  ctx.lineWidth = Math.max(1.5, sr * 0.14)
+  ctx.strokeStyle = '#6e0a14'
+  ctx.stroke()
+  ctx.beginPath()
+  ctx.arc(0, sy, sr * 0.58, 0, Math.PI * 2)
+  ctx.strokeStyle = 'rgba(255,190,190,0.55)'
+  ctx.lineWidth = Math.max(1, sr * 0.1)
+  ctx.stroke()
+}
+
+const ENV_ASPECT = 0.66
+
+/**
+ * Место для конверта в секторе [a0, a1] (углы canvas, по часовой). Перебирает радиус от обода внутрь
+ * и размер от большого к меньшему; берёт первое положение, где все углы конверта вместе с тенью
+ * лежат внутри сектора с отступом `pad` от боковых границ и обода. tilt — наклон конверта (рад),
+ * shift — сдвиг по углу в долях свободного места. Если не влез даже без наклона — null.
+ */
+function fitEnvelope(c: number, R: number, a0: number, a1: number, tilt: number, shift: number) {
+  const pad = 10
+  const span = a1 - a0
+  const inside = (x: number, y: number) => {
+    const dx = x - c
+    const dy = y - c
+    const r = Math.hypot(dx, dy)
+    if (r > R * 0.95 - pad || r < R * 0.28) return false
+    let d = Math.atan2(dy, dx) - a0
+    d = ((d % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)
+    const m = pad / r
+    return d >= m && d <= span - m
+  }
+  const fits = (mid: number, rr: number, w: number, rot: number) => {
+    const h = w * ENV_ASPECT
+    const x = c + Math.cos(mid) * rr
+    const y = c + Math.sin(mid) * rr
+    const cos = Math.cos(rot)
+    const sin = Math.sin(rot)
+    // Углы конверта и тени (тень сдвинута на 3% ширины и 7% высоты).
+    const xs = [-w / 2, w / 2 + w * 0.03]
+    const ys = [-h / 2, h / 2 + h * 0.07]
+    for (const lx of xs) for (const ly of ys) if (!inside(x + lx * cos - ly * sin, y + lx * sin + ly * cos)) return false
+    return true
+  }
+  const at = (rr: number, w: number, t: number) => {
+    // Сдвиг по углу — в пределах того, что остаётся свободным при этой ширине.
+    const free = Math.max(0, span - (w * 1.2) / rr)
+    const mid = a0 + span / 2 + shift * free
+    const rot = mid + Math.PI / 2 + t
+    return fits(mid, rr, w, rot) ? { x: c + Math.cos(mid) * rr, y: c + Math.sin(mid) * rr, w, rot } : null
+  }
+  const radii = Array.from({ length: 21 }, (_, k) => R * (0.8 - k * 0.02))
+  // Обычно: конверт заметного размера (≥ 0,2 R) как можно ближе к ободу.
+  for (const t of [tilt, tilt * 0.5, 0])
+    for (const rr of radii)
+      for (let w = R * 0.3; w >= R * 0.2; w -= R * 0.01) {
+        const spot = at(rr, w, t)
+        if (spot) return spot
+      }
+  // Узкий сектор: самый крупный конверт, какой влезает (при равенстве — ближе к ободу).
+  let best: { x: number; y: number; w: number; rot: number } | null = null
+  for (const t of [tilt * 0.5, 0])
+    for (const rr of radii)
+      for (let w = R * 0.2; w >= R * 0.08; w -= R * 0.005) {
+        if (best && w <= best.w) break
+        const spot = at(rr, w, t)
+        if (spot) {
+          best = spot
+          break
+        }
+      }
+  return best
+}
+
 /**
  * Лицо колеса: сектора по часовой стрелке от верха (как в upgrade.ts). Не кэшируется —
  * у каждой ступени своя раскладка; освобождает вызывающий (dispose).
+ * На зелёных секторах вместо значка — запечатанный конверт с оффером, лежит чуть неровно
+ * (наклон и сдвиг свои у каждого сектора). Что внутри, видно только в окошке после вращения.
  */
 export function wheelFaceTexture(sectors: { kind: 'win' | 'push' | 'lose'; start: number; size: number }[]): THREE.CanvasTexture {
   const S = 1024
@@ -683,6 +839,21 @@ export function wheelFaceTexture(sectors: { kind: 'win' | 'push' | 'lose'; start
     ctx.moveTo(c, c)
     ctx.lineTo(c + Math.cos(a0) * R, c + Math.sin(a0) * R)
     ctx.stroke()
+    // Конверт на зелёном секторе: клапан смотрит к ободу, наклон и сдвиг — случайные, но стабильные
+    // для сектора. Место подбирается так, чтобы конверт (с тенью) целиком лежал внутри сектора
+    // с отступом от границ: как можно ближе к ободу и как можно крупнее.
+    if (sec.kind === 'win') {
+      const jr = rng(i * 7919 + Math.round(sec.start * 1e4) + 17)
+      const spot = fitEnvelope(c, R, a0, a1, (jr() - 0.5) * 0.6, (jr() - 0.5) * 0.3)
+      if (spot) {
+        ctx.save()
+        ctx.translate(spot.x, spot.y)
+        ctx.rotate(spot.rot)
+        drawEnvelope(ctx, spot.w, spot.w * ENV_ASPECT)
+        ctx.restore()
+      }
+      return
+    }
     // Значок по радиусу — только если сектор достаточно широкий.
     const arcLen = sec.size * TAU * R * 0.74
     if (arcLen < 26) return
@@ -746,6 +917,8 @@ export interface WheelPanelInfo {
   odds: number
   status: 'ready' | 'spinning' | 'lost' | 'max'
   last: 'win' | 'push' | 'lose' | null
+  /** Держатель — максимум совпадений во всём пуле (UNICORN), а не просто лучший из оставшихся. */
+  unicorn: boolean
 }
 
 /** Табло у колеса: кого держим, лесенка грейдов, шанс. Не кэшируется — освобождает вызывающий. */
@@ -761,12 +934,16 @@ export function wheelPanelTexture(info: WheelPanelInfo): THREE.CanvasTexture {
   ctx.textBaseline = 'middle'
   ctx.fillStyle = '#e7b64a'
   ctx.font = `900 34px ${FONT}`
-  ctx.fillText('NEGOTIATION WHEEL', W / 2, 52)
+  ctx.fillText(WHEEL.title, W / 2, 52)
 
   ctx.fillStyle = 'rgba(255,242,196,0.6)'
   ctx.font = `800 26px ${FONT}`
-  const head = info.status === 'lost' ? 'WALKED AWAY' : info.path.length > 1 ? 'SIGNED' : 'HOLDING'
-  ctx.fillText(`${head} · ×${info.grade} ★`, W / 2, 100)
+  // Одно и то же состояние колеса → одна и та же фраза (текстура перерисовывается много раз).
+  const key = `${info.status}|${info.last}|${info.path.join('.')}`
+  const head = sayStable(info.status === 'lost' ? WHEEL.headLost : info.path.length > 1 ? WHEEL.headSigned : WHEEL.headHolding, key)
+  const headLine = `${head} · ×${info.grade} ★`
+  fitFont(ctx, headLine, 800, 26, W - 60)
+  ctx.fillText(headLine, W / 2, 100)
 
   // Теги совпавших навыков вместо имени — на колесе ставятся навыки, а не люди.
   // Раскладка: 1–2 ряда по центру, шрифт подстраивается под число тегов.
@@ -830,12 +1007,12 @@ export function wheelPanelTexture(info: WheelPanelInfo): THREE.CanvasTexture {
   let line1 = ''
   let line2 = ''
   let color = '#fff2c4'
-  if (info.status === 'lost') ((line1 = 'NO DEAL'), (line2 = 'the whole chain is lost'), (color = '#ff6b7a'))
-  else if (info.status === 'max') ((line1 = '★ MAXIMUM'), (line2 = 'nobody stronger in the pool'), (color = '#ffd84a'))
-  else if (info.status === 'spinning') ((line1 = 'NEGOTIATING…'), (line2 = `${info.odds}% to sign`), (color = '#9fe8ff'))
+  if (info.status === 'lost') ((line1 = WHEEL.lostTitle), (line2 = sayStable(WHEEL.lost, key)), (color = '#ff6b7a'))
+  else if (info.status === 'max') ((line1 = WHEEL.maxTitle), (line2 = sayStable(info.unicorn ? WHEEL.maxUnicorn : WHEEL.maxLeft, key)), (color = '#ffd84a'))
+  else if (info.status === 'spinning') ((line1 = sayStable(WHEEL.spinning, key)), (line2 = WHEEL.odds(info.odds)), (color = '#9fe8ff'))
   else {
-    line1 = `${info.odds}% TO SIGN`
-    line2 = info.last === 'push' ? 'haggling — free respin!' : 'yellow = free respin · red = lose all'
+    line1 = WHEEL.oddsTitle(info.odds)
+    line2 = info.last === 'push' ? sayStable(WHEEL.push, key) : WHEEL.legend
     color = info.last === 'push' ? '#ffd84a' : '#5cff9a'
   }
   ctx.fillStyle = color
@@ -845,6 +1022,101 @@ export function wheelPanelTexture(info: WheelPanelInfo): THREE.CanvasTexture {
   fitFont(ctx, line2, 700, 28, W - 60)
   ctx.fillText(line2, W / 2, 470)
   return finish(canvas)
+}
+
+/** Цветная плашка навыка (как теги на табло). */
+function drawSkillChip(ctx: CanvasRenderingContext2D, id: SkillId, x: number, y: number, w: number, h: number, px: number, plus: boolean) {
+  const skill = getSkill(id)
+  roundRect(ctx, x, y, w, h, Math.min(16, h / 3))
+  ctx.fillStyle = skill.color
+  ctx.fill()
+  ctx.lineWidth = 4
+  ctx.strokeStyle = '#5cff9a'
+  ctx.stroke()
+  ctx.fillStyle = luminance(skill.color) > 0.45 ? '#16121f' : '#ffffff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  const label = plus ? `+${skill.label}` : skill.label
+  fitFont(ctx, label, 800, px, w - 14)
+  ctx.fillText(label, x + w / 2, y + h / 2 + 1)
+}
+
+/** Что показывает окошко над стрелкой колеса. */
+export type WheelWindowView =
+  | { kind: 'envelope' }
+  | { kind: 'won'; skills: SkillId[] }
+  | { kind: 'push' }
+  | { kind: 'lose' }
+
+export const WHEEL_WINDOW_W = 768
+export const WHEEL_WINDOW_H = 176
+/**
+ * Окошко над стрелкой, как в телешоу: что сейчас под стрелкой. Зелёный — запечатанный конверт
+ * (что внутри, не видно), жёлтый — респин, красный — «ушёл»; после победы — теги выигранных
+ * навыков. Кэшируется по содержимому — вариантов мало, при вращении не рисуется заново.
+ */
+export function wheelWindowTexture(view: WheelWindowView): THREE.CanvasTexture {
+  const skills = view.kind === 'won' ? view.skills : []
+  const key = `__wwin${view.kind}|${skills.join(',')}`
+  const W = WHEEL_WINDOW_W
+  const H = WHEEL_WINDOW_H
+  return fxCanvas(key, W, H, (ctx) => {
+    const edge = view.kind === 'lose' ? '#ff4d6a' : view.kind === 'push' ? '#ffd84a' : '#5cff9a'
+    ctx.clearRect(0, 0, W, H)
+    roundRect(ctx, 5, 5, W - 10, H - 10, 26)
+    ctx.fillStyle = '#05020b'
+    ctx.fill()
+    ctx.lineWidth = 10
+    ctx.strokeStyle = edge
+    ctx.stroke()
+    // Внутренний отсвет по цвету исхода.
+    const glow = ctx.createLinearGradient(0, 0, 0, H)
+    glow.addColorStop(0, edge + '33')
+    glow.addColorStop(1, 'rgba(0,0,0,0)')
+    roundRect(ctx, 14, 14, W - 28, H - 28, 20)
+    ctx.fillStyle = glow
+    ctx.fill()
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+
+    if (view.kind === 'envelope') {
+      // Запечатанный конверт, чуть наискосок.
+      ctx.save()
+      ctx.translate(W / 2, H / 2 + 4)
+      ctx.rotate(-0.07)
+      drawEnvelope(ctx, 200, 132)
+      ctx.restore()
+      return
+    }
+    if (view.kind === 'push' || view.kind === 'lose') {
+      const text = view.kind === 'push' ? WHEEL.windowPush : WHEEL.windowLose
+      ctx.fillStyle = edge
+      fitFont(ctx, text, 900, 70, W - 80)
+      ctx.fillText(text, W / 2, H / 2 + 3)
+      return
+    }
+    // Выигранные навыки: до 4 в ряд, больше — в два ряда.
+    const list = skills.slice(0, 8)
+    const rows = list.length > 4 ? 2 : 1
+    const perRow = Math.ceil(list.length / rows) || 1
+    const gap = 12
+    const areaW = W - 60
+    const chipH = rows === 2 ? 60 : 118
+    const top = rows === 2 ? (H - chipH * 2 - gap) / 2 : (H - chipH) / 2
+    list.forEach((id, i) => {
+      const row = Math.floor(i / perRow)
+      const inRow = row === rows - 1 ? list.length - perRow * (rows - 1) : perRow
+      const col = i - row * perRow
+      const w = Math.min(rows === 2 ? 300 : 380, (areaW - gap * (perRow - 1)) / perRow)
+      const rowW = inRow * w + (inRow - 1) * gap
+      drawSkillChip(ctx, id, (W - rowW) / 2 + col * (w + gap), top + row * (chipH + gap), w, chipH, rows === 2 ? 32 : 60, true)
+    })
+  })
+}
+
+/** Отдельная плашка «+навык» — летит из окошка на табло при победе. Кэшируется. */
+export function skillChipTexture(id: SkillId): THREE.CanvasTexture {
+  return fxCanvas(`__chip|${id}`, 320, 96, (ctx) => drawSkillChip(ctx, id, 6, 6, 308, 84, 44, true))
 }
 
 // ---------- Вывеска: табло статистики, кредиты, клавиши ----------
@@ -943,7 +1215,7 @@ export function makeCreditsDisplay(W: number, H: number) {
     ctx.textBaseline = 'middle'
     ctx.fillStyle = '#9fe8ff'
     ctx.font = `700 ${Math.round(H * 0.13)}px ${FONT}`
-    ctx.fillText('CREDITS', W / 2, H * 0.19)
+    ctx.fillText(MACHINE.credits, W / 2, H * 0.19)
     const text = `◎ ${value.toLocaleString('en-US')}`
     ctx.fillStyle = '#ffd84a'
     ctx.shadowColor = '#ffb000'
@@ -952,7 +1224,8 @@ export function makeCreditsDisplay(W: number, H: number) {
     ctx.fillText(text, W / 2, refill != null ? H * 0.5 : H * 0.6)
     ctx.shadowBlur = 0
     if (refill != null) {
-      const ask = `CLICK: ASK HRD +${refill}`
+      // Фраза фиксирована на время «банкротства» (ключ — текущее значение), иначе мигание меняло бы текст.
+      const ask = sayStable(MACHINE.askBudget, value, refill)
       ctx.fillStyle = blink ? '#ff3fd8' : '#7a2a6a'
       ctx.shadowColor = '#ff3fd8'
       ctx.shadowBlur = blink ? 12 : 0
