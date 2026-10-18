@@ -1,0 +1,37 @@
+{
+  "$comment": [
+    "Группы должностей: в какую группу попадает кандидат по basics.label. Черновик — проверить по data/title-groups.md.",
+    "levels — слова уровня, которые отбрасываются В НАЧАЛЕ должности перед сравнением («Senior Frontend Developer» → «frontend developer»).",
+    "Должность делится на части по « & », « | », « / », «, », « · », « — », « - », «(…)», « at », « @ »; каждая часть сравнивается отдельно. Кандидат может попасть в несколько групп.",
+    "titles — должности целиком (после отбрасывания уровня, регистра и пунктуации). keywords — слова/фразы: если часть должности их содержит (целыми словами), кандидат попадает в группу.",
+    "id — внутренний ключ (не менять у существующих). Web Developer — это Frontend (отдельной группы нет).",
+    "generic: true — общая группа (Software Engineer): кандидат попадает в неё, только если должность не уточнена другой группой («Software Engineer, Frontend» → только Frontend).",
+    "Группа — это набор навыков: навыки всех, кто в неё попал. Пул людей группа не ограничивает.",
+    "fallback (Others) — группа для всех, чья должность не подошла ни к одной группе словаря, даже после поиска фраз групп внутри длинной должности. Список таких должностей — в data/title-groups.md (раздел 2): оттуда удобно пополнять словарь."
+  ],
+  "fallback": {"id": "others", "label": "Others"},
+  "levels": ["senior", "sr", "junior", "jr", "middle", "mid", "mid level", "lead", "principal", "staff", "associate", "entry level", "trainee", "intern"],
+  "groups": [
+    {"id": "frontend", "label": "Frontend Developer", "titles": ["web developer", "web engineer", "web programmer", "web application developer", "web designer and developer", "js developer", "javascript developer", "javascript engineer", "react developer", "react engineer", "react js developer", "vue developer", "vue js developer", "angular developer", "ui developer", "ui engineer", "typescript developer"], "keywords": ["frontend", "front end"]},
+    {"id": "backend", "label": "Backend Developer", "titles": ["java developer", "java engineer", "java devloper", "php developer", "laravel developer", "symfony developer", ".net developer", ".net engineer", "c# developer", "ruby developer", "ruby on rails developer", "rails developer", "rust developer", "golang developer", "go developer", "python developer", "node js developer", "nodejs developer", "django developer"], "keywords": ["backend", "back end"]},
+    {"id": "fullstack", "label": "Full Stack Developer", "titles": [], "keywords": ["full stack", "fullstack", "mern stack", "mean stack", "mern", "mevn"]},
+    {"id": "software", "label": "Software Engineer (general)", "generic": true, "titles": ["software engineer", "software developer", "developer", "programmer", "engineer", "software engineering", "software development engineer", "sde", "coder", "application developer", "applications developer", "computer programmer", "software development", "software engg"], "keywords": []},
+    {"id": "mobile", "label": "Mobile Developer", "titles": [], "keywords": ["mobile", "ios", "android", "flutter", "react native"]},
+    {"id": "devops", "label": "DevOps / SRE", "titles": [], "keywords": ["devops", "sre", "site reliability", "platform engineer", "infrastructure engineer", "cloud engineer", "devsecops", "reliability engineer"]},
+    {"id": "data-engineer", "label": "Data Engineer", "titles": [], "keywords": ["data engineer", "data engineering", "etl developer", "big data"]},
+    {"id": "data-scientist", "label": "Data Scientist", "titles": [], "keywords": ["data scientist", "data science"]},
+    {"id": "data-analyst", "label": "Data / BI Analyst", "titles": [], "keywords": ["data analyst", "bi analyst", "bi developer", "business intelligence", "analytics engineer"]},
+    {"id": "ml", "label": "ML / AI Engineer", "titles": [], "keywords": ["machine learning", "ml", "mlops", "ai", "llm", "deep learning", "nlp", "computer vision"]},
+    {"id": "qa", "label": "QA / Test Engineer", "titles": ["tester"], "keywords": ["qa", "quality assurance", "test automation", "automation test", "test engineer", "sdet", "software tester"]},
+    {"id": "security", "label": "Security Engineer", "titles": [], "keywords": ["security", "cybersecurity", "penetration", "pentester", "appsec", "infosec"]},
+    {"id": "game", "label": "Game Developer", "titles": [], "keywords": ["game", "gameplay", "unity", "unreal"]},
+    {"id": "embedded", "label": "Embedded / Firmware", "titles": [], "keywords": ["embedded", "firmware", "iot"]},
+    {"id": "design", "label": "UI/UX Designer", "titles": [], "keywords": ["ux", "ui ux", "ux ui", "product designer", "ui designer", "graphic designer"]},
+    {"id": "product", "label": "Product Manager / Owner", "titles": [], "keywords": ["product manager", "product owner", "product management"]},
+    {"id": "project", "label": "Project / Program Manager", "titles": [], "keywords": ["project manager", "program manager", "scrum master", "delivery manager", "project management"]},
+    {"id": "eng-lead", "label": "Engineering Manager / Tech Lead", "titles": ["cto", "chief technology officer"], "keywords": ["engineering manager", "software engineering manager", "tech lead", "technical lead", "team lead", "head of engineering", "vp of engineering", "director of engineering", "engineering director", "engineering leader", "head of technology", "head of development"]},
+    {"id": "architect", "label": "Architect", "titles": [], "keywords": ["architect"]},
+    {"id": "sysadmin", "label": "System / Network Administrator", "titles": [], "keywords": ["system administrator", "systems administrator", "sysadmin", "network engineer", "network administrator", "it support", "it specialist"]},
+    {"id": "student", "label": "Student", "titles": [], "keywords": ["student"]}
+  ]
+}

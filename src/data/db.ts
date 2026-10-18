@@ -1,11 +1,14 @@
 import type { Candidate } from '../game/types'
+import { registerSkillLabels } from '../game/skills'
 
-export const DB_VERSION = 1
+export const DB_VERSION = 3
 
 export interface CandidateDb {
   version: number
   generatedAt: string
   counts: { jsonresume: number; github: number }
+  /** Названия навыков не из словаря — как их чаще всего пишут в резюме (id → название). */
+  skillLabels?: Record<string, string>
   candidates: Candidate[]
 }
 
@@ -20,6 +23,7 @@ export async function loadDatabase(): Promise<CandidateDb | null> {
     if (!res.ok) return null
     const db = (await res.json()) as CandidateDb
     if (!db || !Array.isArray(db.candidates)) return null
+    registerSkillLabels(db.skillLabels)
     return { ...db, candidates: db.candidates.filter(isCandidate) }
   } catch {
     return null

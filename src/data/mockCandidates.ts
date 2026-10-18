@@ -1,6 +1,7 @@
 import type { Candidate } from '../game/types'
 import { getSkill } from '../game/skills'
 import { ROLES } from './roles'
+import { groupsForTitle } from './titleGroups'
 
 /** Детерминированный ГПСЧ, чтобы демо-кандидаты не менялись между перезагрузками. */
 function mulberry32(seed: number) {
@@ -55,6 +56,7 @@ export function makeMockCandidates(count = 40, seed = 20260922): Candidate[] {
       bio: pick(BIOS),
       url: similarProfilesUrl(skills),
       skills,
+      groups: groupsForTitle(role.title),
       source: 'mock',
     })
   }

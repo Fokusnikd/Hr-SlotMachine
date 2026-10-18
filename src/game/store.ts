@@ -5,7 +5,8 @@ import { payoutFor, plural, REFILL_AMOUNT, scaleForLines, spinCost, START_CREDIT
 import { calibratePayScale } from './calibrate'
 import { load, save } from './persist'
 import { assignFx, type FxId } from './fx'
-import { getSkill, normalizeSkill } from './skills'
+import { getSkill } from './skills'
+import { groupLabel, groupsForTitle } from '../data/titleGroups'
 import { makeMockCandidates } from '../data/mockCandidates'
 import { loadDatabase } from '../data/db'
 import { bestCandidate, CONSOLATION_SPINS, HIRES_TO_WIN, newBonus, openFolder as openBonusFolder, REJECTS_TO_LOSE, type BonusGame } from './bonus'
@@ -18,9 +19,10 @@ export type SourceFilter = 'all' | Exclude<CandidateSource, 'mock'>
 
 export interface Settings {
   source: SourceFilter
-  /** Фильтр через запятую: навыки («react, docker»), город, слова из должности. Условия объединяются через И. */
-  filter: string
-  /** Выбранные навыки позиции (3–10). Пусто — берём топ-5 позиции. */
+  /** Пресет навыков — группа должностей (src/data/title-groups.json), '' — все навыки. Пул людей НЕ ограничивает:
+   *  только задаёт, из каких навыков выбирать (навыки людей, чья должность попала в группу). */
+  group: string
+  /** Выбранные навыки (3–10). По ним и только по ним считаются совпадения во всём пуле. Пусто — топ-5 пресета. */
   skills: SkillId[]
   /** Сколько линий выплат играет (линии 1…N по порядку). Не меньше минимума для числа навыков. */
   lines: number
@@ -76,9 +78,9 @@ interface State {
   winScale: number
   /** Какой из выигрышей спина сейчас «на руках» (0…wins.length). */
   winIndex: number
-  /** Алфавит барабанов — топ-навыки позиции (+ выбранные). */
+  /** Алфавит барабанов — топ-навыки всего пула (+ выбранные); от пресета не зависит. */
   pool: SkillId[]
-  /** Навыки позиции с числом кандидатов — для выбора в настройках. */
+  /** Топ-навыки всего пула с числом кандидатов — «пустышки» барабанов. */
   roleSkills: { id: SkillId; count: number }[]
   /** Выбранные навыки, по которым считаются совпадения. */
   targets: SkillId[]
@@ -90,7 +92,7 @@ interface State {
   auto: boolean
   /** Счётчик попыток спина без денег — UI открывает по нему окно «Пополнить». */
   brokeAttempts: number
-  /** Анимация каждого навыка позиции (раздаётся при выборе «кого ищем»). */
+  /** Анимация каждого навыка барабанов (раздаётся при выборе «кого ищем»). */
   skillFx: Record<SkillId, FxId>
   /** Когда (performance.now) выпал текущий выигрыш — отсчёт анимаций слотов. */
   winAt: number
@@ -163,7 +165,12 @@ export const DEFAULT_SFX_VOL = 0.8
  * Он остаётся общим mute; громкости, если их нет или они битые, получают значения по умолчанию.
  */
 export function migrateSettings(raw: Partial<Settings> | null | undefined): Partial<Settings> {
-  const src = raw && typeof raw === 'object' ? raw : {}
+  // Свободный фильтр (город, слова из должности) убран — гача только по навыкам
+  const { filter: _dropped, ...src } = (raw && typeof raw === 'object' ? raw : {}) as Partial<Settings> & { filter?: unknown }
+  void _dropped
+  // Группа Web Developer влилась во Frontend, запасная группа Entrepreneurs переименована в Others
+  const GROUP_RENAMES: Record<string, string> = { web: 'frontend', entrepreneurs: 'others' }
+  if (typeof src.group === 'string' && GROUP_RENAMES[src.group]) src.group = GROUP_RENAMES[src.group]
   const vol = (v: unknown, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : d)
   return {
     ...src,
@@ -176,7 +183,7 @@ export function migrateSettings(raw: Partial<Settings> | null | undefined): Part
 
 const initialSettings: Settings = {
   source: 'all',
-  filter: '',
+  group: '',
   skills: [],
   lines: 1,
   sound: true,
@@ -189,17 +196,45 @@ const initialSettings: Settings = {
 
 export const ROLE_SKILLS = 20
 
+/** Источник определяет пул кандидатов; группа (пресет) — только список навыков для выбора, пул она не сужает. */
+export type PoolFilter = Pick<Settings, 'source'> & { group?: string }
+
+/** Группы кандидата: из базы, иначе — по должности (демо-данные, старая база). */
+export function candidateGroups(c: Candidate): string[] {
+  return c.groups ?? (c.title ? groupsForTitle(c.title) : [])
+}
+
+/** Группы должностей (пресеты навыков) среди кандидатов источника, по числу людей. */
+export function groupsFor(all: Candidate[], settings: PoolFilter): { id: string; count: number }[] {
+  const freq = new Map<string, number>()
+  for (const c of applyFilter(all, settings)) for (const g of new Set(candidateGroups(c))) freq.set(g, (freq.get(g) ?? 0) + 1)
+  return [...freq.entries()].sort((a, b) => b[1] - a[1] || groupLabel(a[0]).localeCompare(groupLabel(b[0]))).map(([id, count]) => ({ id, count }))
+}
+
 const RARITY_RANK: Record<Rarity, number> = { common: 0, rare: 1, legendary: 2 }
 
-/** Навыки позиции: топ-20 среди кандидатов, подходящих под фильтр. */
-export function roleSkillsFor(all: Candidate[], settings: Pick<Settings, 'source' | 'filter'>) {
+/** Люди, чьи навыки составляют пресет группы (их должность попала в группу). Пустая или неизвестная группа — весь пул. */
+export function presetMembers(all: Candidate[], settings: PoolFilter): Candidate[] {
+  const list = applyFilter(all, settings)
+  if (!settings.group) return list
+  const members = list.filter((c) => candidateGroups(c).includes(settings.group!))
+  return members.length ? members : list
+}
+
+/** Пресет навыков: все навыки людей группы (без повторов), по числу людей группы с этим навыком. Без группы — все навыки пула. */
+export function poolSkillsFor(all: Candidate[], settings: PoolFilter) {
+  return topSkills(presetMembers(all, settings), Infinity)
+}
+
+/** Самые частые навыки всего пула (без учёта пресета) — «пустышки» на барабанах (кроме выбранных). */
+export function roleSkillsFor(all: Candidate[], settings: PoolFilter) {
   return topSkills(applyFilter(all, settings), ROLE_SKILLS)
 }
 
-/** Выбор по умолчанию — топ-5 позиции. */
+/** Выбор по умолчанию — топ-5 пресета. */
 export const defaultSkills = (role: { id: SkillId }[]) => role.slice(0, BASE_SKILLS).map((s) => s.id)
 
-/** Приводим выбор к списку позиции; если осталось меньше 3 — берём топ-5. */
+/** Оставляем из выбора только навыки, которые есть у кандидатов под фильтром; если осталось меньше 3 — берём топ-5. */
 export function resolveSkills(selected: SkillId[], role: { id: SkillId }[]): SkillId[] {
   const ids = new Set(role.map((s) => s.id))
   const kept = [...new Set(selected)].filter((s) => ids.has(s)).slice(0, MAX_SKILLS)
@@ -230,8 +265,8 @@ export function upgradeCandidates(filtered: Candidate[], targets: SkillId[], exc
   return list
 }
 
-/** Кандидаты позиции, у которых есть хотя бы 3 выбранных навыка — только они могут выпасть. */
-export function playable(all: Candidate[], settings: Pick<Settings, 'source' | 'filter'>, skills: SkillId[]) {
+/** Кандидаты всего пула, у которых есть хотя бы 3 выбранных навыка — только они могут выпасть. */
+export function playable(all: Candidate[], settings: PoolFilter, skills: SkillId[]) {
   const t = new Set(skills)
   return applyFilter(all, settings).filter((c) => countTargets(c, t) >= MIN_MATCH)
 }
@@ -266,31 +301,9 @@ export function withPoolRarity(r: SpinResult, poolMax: number): SpinResult {
   return { ...r, wins, rarity }
 }
 
-function haystack(c: Candidate) {
-  return [c.name, c.title, c.location, c.company, c.bio].filter(Boolean).join(' ').toLowerCase()
-}
-
-export function parseFilter(filter: string) {
-  return filter
-    .split(',')
-    .map((t) => t.trim())
-    .filter(Boolean)
-    .map((t) => ({ raw: t, skill: normalizeSkill(t) }))
-}
-
-export function applyFilter(all: Candidate[], settings: Pick<Settings, 'source' | 'filter'>): Candidate[] {
-  let list = settings.source === 'all' ? all : all.filter((c) => c.source === settings.source)
-  for (const term of parseFilter(settings.filter)) {
-    const needle = term.raw.toLowerCase()
-    list = list.filter((c) => (term.skill ? c.skills.includes(term.skill) : haystack(c).includes(needle)))
-  }
-  return list
-}
-
-export function describeFilter(filter: string): string {
-  return parseFilter(filter)
-    .map((t) => (t.skill ? getSkill(t.skill).label : t.raw))
-    .join(' + ')
+/** Пул кандидатов: только по источнику. Группа (пресет) пул не сужает — совпадения ищутся у всех. */
+export function applyFilter(all: Candidate[], settings: PoolFilter): Candidate[] {
+  return settings.source === 'all' ? all : all.filter((c) => c.source === settings.source)
 }
 
 export const useGame = create<State>((set, get) => {
@@ -305,12 +318,13 @@ export const useGame = create<State>((set, get) => {
 
   let cancelCalibration = () => {}
 
-  /** Пересчитать фильтр → навыки позиции → пул → модель барабанов, линии и масштаб выплат. */
+  /** Пересчитать пресет → выбранные навыки → пул → модель барабанов, линии и масштаб выплат. */
   const rebuild = (opts: { field?: boolean } = { field: true }) => {
     const { all, excluded } = get()
     let { settings } = get()
+    const available = poolSkillsFor(all, settings)
     const roleSkills = roleSkillsFor(all, settings)
-    const targets = resolveSkills(settings.skills, roleSkills)
+    const targets = resolveSkills(settings.skills, available)
     const lineCount = resolveLines(settings.lines, targets.length)
     if (targets.join() !== settings.skills.join() || lineCount !== settings.lines) settings = { ...settings, skills: targets, lines: lineCount }
     const filtered = applyFilter(all, settings)
@@ -325,7 +339,7 @@ export const useGame = create<State>((set, get) => {
       pool,
       roleSkills,
       targets,
-      skillFx: assignFx(pool, `${settings.source}|${settings.filter.trim().toLowerCase()}`),
+      skillFx: assignFx(pool, settings.source),
       lines: linesFor(lineCount),
       cost: spinCost(lineCount),
       ...(changed ? { linesChangedAt: performance.now() } : {}),
@@ -678,7 +692,7 @@ export const useGame = create<State>((set, get) => {
       const settings = { ...prev, ...patch }
       set({ settings })
       persist()
-      const onlyLines = settings.source === prev.source && settings.filter === prev.filter && settings.skills.join() === prev.skills.join()
+      const onlyLines = settings.source === prev.source && settings.group === prev.group && settings.skills.join() === prev.skills.join()
       if (onlyLines && settings.lines !== prev.lines) {
         // Смена числа линий не трогает модель барабанов — только линии и цену спина.
         rebuild({ field: false })

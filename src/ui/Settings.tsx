@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
-import { parseFilter, playable, resolveLines, resolveSkills, defaultSkills, roleSkillsFor, useGame, type SourceFilter } from '../game/store'
+import { playable, resolveLines, resolveSkills, defaultSkills, groupsFor, poolSkillsFor, roleSkillsFor, useGame, type SourceFilter } from '../game/store'
+import { groupLabel } from '../data/titleGroups'
 import { MAX_SKILLS, MIN_SKILLS } from '../game/outcome'
 import { LINE_BET, plural } from '../game/economy'
 import { BONUS_MIN, HIRES_TO_WIN, REJECTS_TO_LOSE } from '../game/bonus'
@@ -9,19 +10,6 @@ import { assignFx, fxLabel } from '../game/fx'
 import { Modal } from './common'
 import { sfx } from '../audio/sfx'
 import type { SkillId } from '../game/types'
-
-const PRESETS: { label: string; filter: string }[] = [
-  { label: 'All', filter: '' },
-  { label: 'Frontend', filter: 'react, typescript' },
-  { label: 'Node.js', filter: 'node' },
-  { label: 'Python', filter: 'python' },
-  { label: 'Go', filter: 'go' },
-  { label: 'Java', filter: 'java' },
-  { label: 'DevOps', filter: 'docker, kubernetes' },
-  { label: 'ML', filter: 'ml' },
-  { label: 'Mobile', filter: 'swift' },
-  { label: 'Senior', filter: 'senior' },
-]
 
 const SOURCES: { id: SourceFilter; label: string }[] = [
   { id: 'all', label: 'All' },
@@ -81,22 +69,38 @@ export function Settings({ onClose }: { onClose: () => void }) {
   const update = useGame((s) => s.updateSettings)
   const reset = useGame((s) => s.resetProgress)
   const [source, setSource] = useState<SourceFilter>(settings.source)
-  const [filter, setFilter] = useState(settings.filter)
+  const [group, setGroup] = useState(settings.group)
+  const [groupQuery, setGroupQuery] = useState('')
   const [picked, setPicked] = useState<SkillId[]>(settings.skills)
 
-  const role = useMemo(() => roleSkillsFor(all, { source, filter }), [all, source, filter])
-  // Анимации навыков раздаются по позиции — та же раздача, что будет в игре.
-  const fxMap = useMemo(() => assignFx(role.map((r) => r.id), `${source}|${filter.trim().toLowerCase()}`), [role, source, filter])
-  // Если позиция сменилась и из выбора почти ничего не осталось — подставляем топ-5.
-  const skills = useMemo(() => resolveSkills(picked, role), [picked, role])
+  // Пресет: навыки людей выбранной группы (без группы — все навыки пула). Ограничено только число выбранных.
+  const available = useMemo(() => poolSkillsFor(all, { source, group }), [all, source, group])
+  // Если пресет сменился и из выбора почти ничего не осталось — подставляем топ-5.
+  const skills = useMemo(() => resolveSkills(picked, available), [picked, available])
   const selected = new Set(skills)
-  const matches = useMemo(() => playable(all, { source, filter }, skills).length, [all, source, filter, skills])
-  const terms = parseFilter(filter)
+  // Анимации раздаются по пулу барабанов (топ навыков всего пула + выбранные) — та же раздача, что будет в игре.
+  const reelSkills = useMemo(() => roleSkillsFor(all, { source }), [all, source])
+  const fxMap = useMemo(() => assignFx([...new Set([...reelSkills.map((r) => r.id), ...skills])], source), [reelSkills, skills, source])
+  const [query, setQuery] = useState('')
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const hit = (id: SkillId) => !q || getSkill(id).label.toLowerCase().includes(q) || id.includes(q)
+    // Выбранные — всегда сверху, дальше все подходящие под поиск, по числу кандидатов
+    return [...available.filter((s) => selected.has(s.id)), ...available.filter((s) => !selected.has(s.id) && hit(s.id))]
+  }, [available, query, skills])
+  // Совпадения — во всём пуле источника: пресет только подсказывает навыки
+  const matches = useMemo(() => playable(all, { source }, skills).length, [all, source, skills])
   const lineCount = resolveLines(settings.lines, skills.length)
 
-  const choosePreset = (f: string) => {
-    setFilter(f)
-    setPicked(defaultSkills(roleSkillsFor(all, { source, filter: f })))
+  // Пресеты навыков — группы должностей (src/data/title-groups.json) среди кандидатов источника
+  const groups = useMemo(() => groupsFor(all, { source }), [all, source])
+  const shownGroups = useMemo(() => {
+    const q = groupQuery.trim().toLowerCase()
+    return groups.filter((g) => g.id === group || !q || groupLabel(g.id).toLowerCase().includes(q))
+  }, [groups, groupQuery, group])
+  const chooseGroup = (g: string) => {
+    setGroup(g)
+    setPicked(defaultSkills(poolSkillsFor(all, { source, group: g })))
   }
 
   const toggle = (id: SkillId) => {
@@ -106,7 +110,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
   }
 
   const apply = () => {
-    update({ source, filter: filter.trim(), skills, lines: lineCount })
+    update({ source, group, skills, lines: lineCount })
     onClose()
   }
 
@@ -134,20 +138,25 @@ export function Settings({ onClose }: { onClose: () => void }) {
       )}
 
       <div className="field">
-        <span className="field__label">Who we're looking for</span>
-        <input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="e.g.: react, docker, berlin" spellCheck={false} />
-        <div className="presets">
-          {PRESETS.map((p) => (
-            <button key={p.label} className={`chip chip--btn ${filter === p.filter ? 'chip--matched' : ''}`} onClick={() => choosePreset(p.filter)}>
-              {p.label}
+        <span className="field__label">
+          Skill preset <span className="muted small">{groups.length} positions from résumé titles · everyone stays in the pool</span>
+        </span>
+        <input className="skill-search" value={groupQuery} onChange={(e) => setGroupQuery(e.target.value)} placeholder={`Search ${groups.length} presets…`} spellCheck={false} />
+        <div className="skill-picker skill-picker--groups">
+          <button className={`chip chip--btn chip--pick ${group === '' ? 'chip--matched' : ''}`} onClick={() => chooseGroup('')} aria-pressed={group === ''}>
+            All skills
+          </button>
+          {shownGroups.map((g) => (
+            <button
+              key={g.id}
+              className={`chip chip--btn chip--pick ${group === g.id ? 'chip--matched' : ''}`}
+              onClick={() => chooseGroup(g.id)}
+              aria-pressed={group === g.id}
+            >
+              {groupLabel(g.id)} <span className="chip__count">{g.count}</span>
             </button>
           ))}
         </div>
-        <span className="hint">
-          Comma-separated, all conditions apply together. Skills are recognized from a dictionary
-          {terms.some((t) => t.skill) && <> ({terms.filter((t) => t.skill).map((t) => getSkill(t.skill!).label).join(', ')})</>}, everything else is
-          searched for in the title, city, and description.
-        </span>
       </div>
 
       <div className="field">
@@ -157,9 +166,17 @@ export function Settings({ onClose }: { onClose: () => void }) {
             {skills.length} of {MAX_SKILLS} selected
           </span>
         </span>
-        {role.length ? (
-          <div className="skill-picker">
-            {role.map((s) => {
+        {available.length ? (
+          <>
+          <input
+            className="skill-search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${available.length} skills…`}
+            spellCheck={false}
+          />
+          <div className="skill-picker skill-picker--all">
+            {shown.map((s) => {
               const on = selected.has(s.id)
               const sk = getSkill(s.id)
               const locked = !on && skills.length >= MAX_SKILLS
@@ -171,20 +188,22 @@ export function Settings({ onClose }: { onClose: () => void }) {
                   onClick={() => toggle(s.id)}
                   disabled={locked}
                   aria-pressed={on}
-                  title={`${s.count} ${plural(s.count, 'candidate', 'candidates', 'candidates')} with this skill · animation: ${fxLabel(fxMap[s.id])}`}
+                  title={`${s.count} ${plural(s.count, 'candidate', 'candidates', 'candidates')} with this skill${group ? ' in this preset' : ''}${fxMap[s.id] ? ` · animation: ${fxLabel(fxMap[s.id])}` : ''}`}
                 >
                   {on && <span className="chip__check">✓</span>}
                   {sk.label} <span className="chip__count">{s.count}</span>
                 </button>
               )
             })}
+            {!shown.length && <span className="hint">No skills match “{query}”.</span>}
           </div>
+          </>
         ) : (
-          <span className="hint">No candidates match this filter — there are no skills to choose from.</span>
+          <span className="hint">No candidates in this preset — there are no skills to choose from.</span>
         )}
         <span className={`match-count ${matches < 10 ? 'match-count--low' : ''}`}>
           Matches: <b>{matches.toLocaleString('en-US')}</b> <span className="muted small">(has 3+ selected skills)</span>{' '}
-          {matches < 10 && '— too few to play, loosen the filter or pick different skills'}
+          {matches < 10 && '— too few to play, pick different skills'}
         </span>
       </div>
 

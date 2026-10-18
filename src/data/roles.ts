@@ -6,6 +6,7 @@ interface Role {
   extra: SkillId[]
 }
 
+/** Роли для демо-данных (mockCandidates), когда настоящей базы нет. */
 export const ROLES: Role[] = [
   { title: 'Frontend Developer', core: ['react', 'typescript', 'css'], extra: ['javascript', 'html', 'testing', 'graphql', 'figma', 'node', 'vue', 'threejs', 'ci'] },
   { title: 'Vue Developer', core: ['vue', 'javascript', 'css'], extra: ['typescript', 'html', 'node', 'testing', 'figma', 'php'] },
@@ -24,17 +25,3 @@ export const ROLES: Role[] = [
   { title: 'PHP Developer', core: ['php', 'sql', 'javascript'], extra: ['docker', 'redis', 'vue', 'css', 'linux'] },
   { title: '.NET Developer', core: ['csharp', 'sql', 'docker'], extra: ['angular', 'typescript', 'kafka', 'aws', 'testing'] },
 ]
-
-/** Угадываем «должность» по набору навыков GitHub-профиля. */
-export function guessTitle(skills: SkillId[]): string {
-  const set = new Set(skills)
-  let best: { title: string; score: number } = { title: 'Developer', score: 0 }
-  for (const r of ROLES) {
-    const score =
-      r.core.reduce((acc, s, i) => acc + (set.has(s) ? 3 - i * 0.5 : 0), 0) +
-      r.extra.reduce((acc, s) => acc + (set.has(s) ? 0.5 : 0), 0) +
-      (skills[0] === r.core[0] ? 1.5 : 0)
-    if (score > best.score) best = { title: r.title, score }
-  }
-  return best.score >= 3 ? best.title : 'Developer'
-}

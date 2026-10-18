@@ -1,6 +1,5 @@
 import type { Candidate, SkillId } from '../../game/types'
-import { extractSkillsFromText, normalizeSkill } from '../../game/skills'
-import { guessTitle } from '../roles'
+import { skillKey } from '../../game/skills'
 
 // GITHUB_API_URL — для тестов сборщика на локальном мок-сервере
 const API = (typeof process !== 'undefined' && process.env?.GITHUB_API_URL) || 'https://api.github.com'
@@ -60,18 +59,19 @@ export async function gh<T>(path: string, token?: string, signal?: AbortSignal):
   return res.json() as Promise<T>
 }
 
-/** Превращает профиль + репозитории в набор навыков, отсортированный по весу. */
-export function deriveSkills(user: Pick<GhUser, 'bio'>, repos: GhRepo[]): SkillId[] {
+/**
+ * Навыки из явных полей репозиториев: язык и topics (как их записал GitHub/автор), по весу.
+ * Био и описания не разбираем — не угадываем навыки по свободному тексту.
+ */
+export function deriveSkills(repos: GhRepo[]): SkillId[] {
   const score = new Map<SkillId, number>()
   const add = (id: SkillId | null, w: number) => id && score.set(id, (score.get(id) ?? 0) + w)
   for (const r of repos) {
     if (r.fork) continue
     const starBoost = 1 + Math.min(2, Math.log10(1 + r.stargazers_count) / 2)
-    add(normalizeSkill(r.language), 2 * starBoost)
-    for (const t of r.topics ?? []) add(normalizeSkill(t), 1)
-    for (const s of extractSkillsFromText(r.description)) add(s, 0.3)
+    add(skillKey(r.language), 2 * starBoost)
+    for (const t of r.topics ?? []) add(skillKey(t), 1)
   }
-  for (const s of extractSkillsFromText(user.bio)) add(s, 4)
   return [...score.entries()]
     .filter(([, w]) => w >= 1.5)
     .sort((a, b) => b[1] - a[1])
@@ -118,7 +118,7 @@ export async function fetchGithubRaw(login: string, token?: string): Promise<Git
 
 export function githubToCandidate(raw: GithubRaw): Candidate | null {
   const { user, repos } = raw
-  const skills = deriveSkills(user, repos)
+  const skills = deriveSkills(repos)
   if (skills.length < 3) return null
   const blog = user.blog ? (user.blog.startsWith('http') ? user.blog : `https://${user.blog}`) : undefined
   return {
@@ -126,7 +126,7 @@ export function githubToCandidate(raw: GithubRaw): Candidate | null {
     login: user.login,
     name: user.name || user.login,
     avatarUrl: user.avatar_url,
-    title: guessTitle(skills),
+    // У GitHub нет поля должности — не выдумываем её.
     location: user.location ?? undefined,
     company: user.company?.replace(/^@/, '') ?? undefined,
     bio: user.bio ?? undefined,

@@ -4,8 +4,10 @@ import { activeCells, buildField, buildReelModel, spinField, buildSymbolPool, co
 import { makeMockCandidates } from '../data/mockCandidates'
 import { deriveSkills } from '../data/sources/github'
 import { compactResume, jsonResumeToCandidate } from '../data/sources/jsonresume'
-import { applyFilter, resolveSkills } from './store'
-import { extractSkillsFromText, normalizeKeyword, normalizeSkill } from './skills'
+import { applyFilter, poolSkillsFor, resolveSkills } from './store'
+import { groupsForTitle, isForeignTitle } from '../data/titleGroups'
+import { getSkill, normalizeKeyword, registerSkillLabels, skillKey } from './skills'
+import { deriveResumeSkills } from '../data/sources/jsonresume'
 import { payoutFor, payScaleFrom, spinCost } from './economy'
 
 function seeded(seed: number) {
@@ -180,42 +182,95 @@ describe('outcome', () => {
 })
 
 describe('skills', () => {
-  it('normalizes GitHub languages and topics', () => {
-    expect(normalizeSkill('TypeScript')).toBe('typescript')
-    expect(normalizeSkill('nextjs')).toBe('react')
-    expect(normalizeSkill('HCL')).toBe('terraform')
-    expect(normalizeSkill('Brainfuck')).toBeNull()
+  it('only merges spellings of the same skill, never different skills', () => {
+    expect(skillKey('TypeScript')).toBe('typescript')
+    expect(skillKey('Node.js')).toBe('node')
+    expect(skillKey('NodeJS')).toBe('node')
+    expect(skillKey('k8s')).toBe('kubernetes')
+    expect(skillKey('PostgreSQL')).toBe('postgres')
+    // Разные технологии остаются разными навыками
+    expect(skillKey('Next.js')).toBe('nextjs')
+    expect(skillKey('DevOps')).toBe('devops')
+    expect(skillKey('GitHub Actions')).toBe('git')
+    expect(skillKey('Android')).toBe('android')
+    expect(skillKey('Django')).toBe('django')
+    expect(skillKey('Design')).not.toBe('figma')
+    // Навык не из словаря сохраняется как есть
+    expect(skillKey('Brainfuck')).toBe('brainfuck')
+    expect(skillKey('  ')).toBeNull()
   })
 
-  it('extracts skills from bio without false positives on short words', () => {
-    expect(extractSkillsFromText('Senior React/TypeScript dev, love Kubernetes. Let us go!')).toEqual(
-      expect.arrayContaining(['react', 'typescript', 'kubernetes']),
-    )
-    expect(extractSkillsFromText('Let us go to the moon')).toEqual([])
+  it('labels unknown skills as they are written in resumes', () => {
+    registerSkillLabels({ brainfuck: 'Brainfuck' })
+    expect(getSkill('brainfuck').label).toBe('Brainfuck')
+    expect(getSkill('brainfuck').color).toMatch(/^#[0-9a-f]{6}$/)
   })
 
-  it('deriveSkills weights languages over topics', () => {
-    const skills = deriveSkills({ bio: 'Go and Postgres fan' }, [
-      { fork: false, language: 'Go', topics: ['docker', 'kubernetes'], stargazers_count: 100, description: null },
+  it('deriveSkills uses repo languages and topics only', () => {
+    const skills = deriveSkills([
+      { fork: false, language: 'Go', topics: ['docker', 'kubernetes'], stargazers_count: 100, description: 'Postgres tooling' },
       { fork: false, language: 'Go', topics: [], stargazers_count: 3, description: null },
       { fork: true, language: 'Java', topics: [], stargazers_count: 0, description: null },
       { fork: false, language: 'Shell', topics: ['docker'], stargazers_count: 0, description: null },
     ])
     expect(skills[0]).toBe('go')
-    expect(skills).toContain('postgres')
     expect(skills).toContain('docker')
+    expect(skills).toContain('shell')
+    expect(skills).not.toContain('postgres')
     expect(skills).not.toContain('java')
   })
 })
 
 describe('json resume', () => {
-  it('splits and normalizes messy keywords', () => {
-    expect(normalizeKeyword('HTML/CSS').sort()).toEqual(['css', 'html'])
-    expect(normalizeKeyword('React (Hooks, Redux)')).toEqual(['react'])
-    expect(normalizeKeyword('GitHub Actions')).toEqual(['ci'])
-    expect(normalizeKeyword('Express JS')).toEqual(['node'])
+  it('splits lists but keeps compound skills whole', () => {
+    expect(normalizeKeyword('HTML/CSS')).toEqual(['html', 'css'])
+    expect(normalizeKeyword('CI/CD')).toEqual(['ci'])
+    expect(normalizeKeyword('UI/UX')).toEqual(['ui/ux'])
+    expect(normalizeKeyword('PL/SQL')).toEqual(['pl/sql'])
+    expect(normalizeKeyword('TCP/IP')).toEqual(['tcp/ip'])
+    expect(normalizeKeyword('React/Next')).toEqual(['react', 'nextjs'])
+    expect(normalizeKeyword('Redux/Apollo')).toEqual(['redux', 'apollo'])
+    expect(normalizeKeyword('Research and Development')).toEqual(['researchanddevelopment'])
+    expect(normalizeKeyword('React (Hooks, Redux)')).toEqual(['react', 'redux'])
+    expect(normalizeKeyword('Python (advanced)')).toEqual(['python'])
+    expect(normalizeKeyword('AWS, GCP; Azure')).toEqual(['aws', 'gcp', 'azure'])
+    expect(normalizeKeyword('Express JS')).toEqual(['express'])
     expect(normalizeKeyword('C++')).toEqual(['cpp'])
-    expect(normalizeKeyword('Watercolor')).toEqual([])
+    expect(normalizeKeyword('I love building scalable systems with great people')).toEqual([])
+  })
+
+  it('takes skills from keywords; group name is a skill only when the group has no keywords', () => {
+    const raw = compactResume('x', {
+      basics: { name: 'X' },
+      skills: [
+        { name: 'DevOps', keywords: ['Docker', 'Jenkins'] },
+        { name: 'Go' },
+        { name: 'Frontend', keywords: ['React', 'Next.js'] },
+      ],
+      work: [{ position: 'Engineer', summary: 'Wrote Kafka consumers in Rust' }],
+    })
+    expect(deriveResumeSkills(raw).map((s) => s.id)).toEqual(['docker', 'jenkins', 'go', 'react', 'nextjs'])
+  })
+
+  it('takes the title only from basics.label; without it the resume is skipped', () => {
+    const base = { basics: { name: 'Y' }, skills: [{ name: 'a', keywords: ['Go', 'Rust', 'C'] }], work: [{ position: 'CTO' }] }
+    const withLabel = compactResume('y', { ...base, basics: { name: 'Y', label: 'Platform Engineer' } })
+    expect(jsonResumeToCandidate(withLabel)!.title).toBe('Platform Engineer')
+    expect(jsonResumeToCandidate(compactResume('y', base))).toBeNull()
+  })
+
+  it('keeps every group and every skill (no caps)', () => {
+    const keywords = Array.from({ length: 60 }, (_, i) => `Tool${i}`)
+    const groups = Array.from({ length: 45 }, (_, i) => ({ name: `Skill${i}` }))
+    const raw = compactResume('z', { basics: { name: 'Z', label: 'Dev' }, skills: [{ name: 'Tools', keywords }, ...groups] })
+    expect(deriveResumeSkills(raw)).toHaveLength(105)
+  })
+
+  it('never drops a list just because it is long', () => {
+    expect(normalizeKeyword('Notion / Telegram / Discord')).toEqual(['notion', 'telegram', 'discord'])
+    expect(normalizeKeyword('Continuous Integration and Continuous Delivery (CI/CD)')).toEqual(['ci'])
+    expect(normalizeKeyword('ML')).toEqual(['ml'])
+    expect(normalizeKeyword('CI')).toEqual(['ci_'])
   })
 
   it('converts a resume into a candidate', () => {
@@ -230,27 +285,23 @@ describe('json resume', () => {
     const c = jsonResumeToCandidate(raw)!
     expect(c.id).toBe('jr-jane')
     expect(c.url).toBe('https://registry.jsonresume.org/jane')
-    expect(c.skills.slice(0, 2)).toEqual(['react', 'typescript'])
-    expect(c.skills).toEqual(expect.arrayContaining(['css', 'html', 'docker', 'testing']))
+    expect(c.skills).toEqual(['react', 'typescript', 'html', 'css', 'docker', 'jest'])
+    expect(c.title).toBe('Senior Frontend Engineer')
     expect(c.location).toBe('Berlin, DE')
     expect(c.years).toBe(new Date().getFullYear() - 2016)
     expect(c.links?.[0].label).toBe('LinkedIn')
   })
 
-  it('drops resumes without enough known skills', () => {
+  it('drops resumes with fewer than 3 skills', () => {
     const raw = compactResume('artist', { basics: { name: 'A' }, skills: [{ name: 'Art', keywords: ['Watercolor', 'Oil'] }] })
     expect(jsonResumeToCandidate(raw)).toBeNull()
   })
 })
 
 describe('filters & dense decks', () => {
-  it('filters by skill and by free text (AND)', () => {
-    const react = applyFilter(candidates, { source: 'all', filter: 'react' })
-    expect(react.length).toBeGreaterThan(0)
-    expect(react.every((c) => c.skills.includes('react'))).toBe(true)
-    const both = applyFilter(candidates, { source: 'all', filter: 'react, frontend' })
-    expect(both.every((c) => c.skills.includes('react') && c.title!.toLowerCase().includes('frontend'))).toBe(true)
-    expect(applyFilter(candidates, { source: 'github', filter: '' })).toHaveLength(0)
+  it('filters only by source and position group', () => {
+    expect(applyFilter(candidates, { source: 'all' })).toHaveLength(candidates.length)
+    expect(applyFilter(candidates, { source: 'github' })).toHaveLength(0)
   })
 
   it('evaluates the whole pool, not a deck', () => {
@@ -312,5 +363,50 @@ describe('matches through line intersections', () => {
     g[0] = ['react', 'php', 'css', 'java', 'typescript']
     const ev = evaluateStructure(g, linesFor(1), T, [c])
     expect(ev.matched).toHaveLength(3)
+  })
+})
+
+describe('title groups', () => {
+  it('merges titles only by the dictionary, strips leading levels, allows several groups', () => {
+    expect(groupsForTitle('Senior JS Developer')).toEqual(['frontend'])
+    expect(groupsForTitle('Middle Frontend Developer')).toEqual(['frontend'])
+    expect(groupsForTitle('Front-End Engineer')).toEqual(['frontend'])
+    expect(groupsForTitle('Full Stack Developer & AI Engineer')).toEqual(['fullstack', 'ml'])
+    expect(groupsForTitle('Senior Software Engineer')).toEqual(['software'])
+    expect(groupsForTitle('Tech Lead')).toEqual(['eng-lead'])
+    expect(groupsForTitle('Junior .NET Developer')).toEqual(['backend'])
+    // Web Developer — это Frontend
+    expect(groupsForTitle('Senior Web Developer')).toEqual(['frontend'])
+    // Общая группа Software Engineer — только без уточнения
+    expect(groupsForTitle('Software Engineer, Frontend')).toEqual(['frontend'])
+    expect(groupsForTitle('Software Engineer (Backend)')).toEqual(['backend'])
+    // Длинная должность: ищем фразы словаря в тексте, берём первую
+    expect(groupsForTitle('A curious React developer who also writes Node services')).toEqual(['frontend'])
+    // Не подошла ни к одной группе — Others
+    expect(groupsForTitle('Inventor and Businessman')).toEqual(['others'])
+    expect(groupsForTitle('Crafting code with people in mind.')).toEqual(['others'])
+  })
+
+  it('detects non-English titles', () => {
+    expect(isForeignTitle('Desarrollador de Software')).toBe(true)
+    expect(isForeignTitle('Développeur Web')).toBe(true)
+    expect(isForeignTitle('Java разработчик')).toBe(true)
+    expect(isForeignTitle('后端工程师')).toBe(true)
+    expect(isForeignTitle('Senior EM at Apollo')).toBe(false)
+    expect(isForeignTitle('Full Stack Developer & AI Engineer')).toBe(false)
+    expect(isForeignTitle('C++ / .NET Developer · Node.js')).toBe(false)
+  })
+
+  it('a group is a skill preset: it never narrows the pool', () => {
+    const pool = [
+      { ...candidates[0], id: 'a', groups: ['frontend'], skills: ['react', 'css', 'typescript'] },
+      { ...candidates[1], id: 'b', groups: ['backend'], skills: ['go', 'postgres', 'typescript'] },
+    ]
+    expect(applyFilter(pool, { source: 'all', group: 'frontend' })).toHaveLength(2)
+    // Пресет — навыки людей группы, без повторов
+    expect(poolSkillsFor(pool, { source: 'all', group: 'frontend' }).map((s) => s.id).sort()).toEqual(['css', 'react', 'typescript'])
+    expect(poolSkillsFor(pool, { source: 'all', group: '' })).toHaveLength(5)
+    // Неизвестная группа (старые настройки) — все навыки
+    expect(poolSkillsFor(pool, { source: 'all', group: 'web' })).toHaveLength(5)
   })
 })
