@@ -46,8 +46,25 @@ jobs:
       - run: npm ci
 
       # Только JSON Resume: сборщик GitHub (db:github) пока не проверен в проде, см. README.
+      # Реестр периодически отвечает HTTP 500 — это не должно ронять деплой: пробуем 3 раза, потом
+      # собираем из сырого кэша прошлых запусков (restore-keys выше), а если и его нет — сайт уезжает
+      # с демо-кандидатами (store.ts сам откатывается на mockCandidates, когда candidates.json нет).
       - name: Обновить базу кандидатов из JSON Resume Registry
-        run: npm run db:jsonresume && npm run db:build
+        run: |
+          ok=0
+          for i in 1 2 3; do
+            if npm run db:jsonresume; then ok=1; break; fi
+            echo "::warning::JSON Resume Registry не ответил (попытка $i из 3)"
+            sleep 30
+          done
+          if [ "$ok" = 0 ]; then
+            echo "::warning::Реестр недоступен — используем кэш прошлых запусков, если он есть"
+          fi
+          if ls data/raw/*.json >/dev/null 2>&1; then
+            npm run db:build
+          else
+            echo "::warning::Сырых резюме нет — деплой пойдёт с демо-данными"
+          fi
 
       - run: npm test
 
