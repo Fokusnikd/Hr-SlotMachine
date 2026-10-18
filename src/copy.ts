@@ -170,6 +170,7 @@ export const CARD = {
   wheelBtn: '🎡 Negotiation wheel',
   wheelHint:
     'Spin the negotiation wheel: green — a stronger match steps in and you can keep climbing, yellow — free respin, red — the candidate walks and the whole chain is lost',
+  moreSkills: (n: number) => `+${n} more`,
   openResume: 'Open resume ↗',
   openProfile: 'Open profile ↗',
   shortlist: '⭐ Add to shortlist',
@@ -249,8 +250,8 @@ export const MSG = {
   ],
   demo: 'No database yet — interviewing demo candidates for now',
   noMatch: [
-    'Hunting unicorns? Nobody matches this filter — relax it in settings ⚙',
-    'This job ad scared everyone off — loosen the filter in settings ⚙',
+    'Hunting unicorns? Nobody has these skills together — change them in settings ⚙',
+    'This job ad scared everyone off — try other skills in settings ⚙',
     'Zero applicants. Maybe drop "10 years of experience"? Settings ⚙',
   ],
   outOfCredits: [
@@ -259,8 +260,8 @@ export const MSG = {
     'Out of credits. Finance says "next quarter". Ask HRD (button up top)',
   ],
   poolDrained: [
-    'Talent pool drained — change the filter or reset progress ⚙',
-    "You've met everyone. Literally. Change the filter or reset progress ⚙",
+    'Talent pool drained — change the skills or reset progress ⚙',
+    "You've met everyone. Literally. Change the skills or reset progress ⚙",
   ],
   spinning: ['Sourcing…', 'Scanning resumes…', 'Boolean search in progress…', 'Screening…'],
   autoSpinning: ['Auto-spin: spray and pray…', 'Auto-spin: mass outreach mode…', 'Auto-spin: copy-pasting InMails…'],

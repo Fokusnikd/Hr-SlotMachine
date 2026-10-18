@@ -6,6 +6,8 @@ export interface Candidate {
   login?: string
   avatarUrl?: string
   title?: string
+  /** Группы должности (src/data/title-groups.json): id групп из словаря или общей группы (fallback), если должность ни к одной не подошла. */
+  groups?: string[]
   location?: string
   company?: string
   bio?: string

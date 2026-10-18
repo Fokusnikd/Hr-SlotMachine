@@ -1,3 +1,4 @@
+import { groupLabel } from '../data/titleGroups'
 import { useEffect, useMemo, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { RoundedBox } from '@react-three/drei'
@@ -10,7 +11,6 @@ import { UpgradeWheel } from './UpgradeWheel'
 import { Sparks } from './Sparks'
 import { MACHINE as TEXT } from '../copy'
 import { capLabelTexture, iconKeyTexture, keyLabelTexture, lineTagTexture, wideLabelTexture, makeCreditsDisplay, makeLinesDisplay, makeMessageDisplay, makeStatsDisplay, signTexture } from './textures'
-import { describeFilter } from '../game/store'
 import { plural, REFILL_AMOUNT } from '../game/economy'
 import { openSettings, openShortlist } from '../ui/uiState'
 import { sfx } from '../audio/sfx'
@@ -439,7 +439,7 @@ const DISPLAY_PPU = 320
 function StatsDisplay({ x, w }: { x: number; w: number }) {
   const db = useGame((s) => s.db)
   const pool = useGame((s) => s.poolInfo)
-  const filter = useGame((s) => s.settings.filter)
+  const group = useGame((s) => s.settings.group)
   const source = useGame((s) => s.settings.source)
   const stats = useGame((s) => s.stats)
   const skillCount = useGame((s) => s.targets.length)
@@ -447,7 +447,7 @@ function StatsDisplay({ x, w }: { x: number; w: number }) {
   const disp = useMemo(() => makeStatsDisplay(Math.round(w * DISPLAY_PPU), Math.round(h * DISPLAY_PPU)), [w, h])
   useEffect(() => {
     const src = source !== 'all' ? (source === 'github' ? 'GITHUB' : 'JSON RESUME') : TEXT.allSources
-    const flt = filter.trim() ? ` · ${describeFilter(filter).toUpperCase()}` : ''
+    const flt = group ? ` · ${groupLabel(group).toUpperCase()}` : ''
     const status =
       db.status === 'loading'
         ? TEXT.loadingDb
@@ -462,7 +462,7 @@ function StatsDisplay({ x, w }: { x: number; w: number }) {
       { label: TEXT.stats.spins, value: String(stats.spins) },
       { label: TEXT.stats.finds, value: String(stats.wins) },
     ])
-  }, [disp, db.status, pool, filter, source, stats.spins, stats.wins, skillCount])
+  }, [disp, db.status, pool, group, source, stats.spins, stats.wins, skillCount])
   return (
     <mesh position={[x, 0, 0]}>
       <planeGeometry args={[w, h]} />

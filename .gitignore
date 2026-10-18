@@ -9,3 +9,8 @@ dist
 data/raw/
 public/data/candidates.json
 _to_delete/
+
+# Служебное
+Claude outputs/
+.worktrees/
+*.tsbuildinfo

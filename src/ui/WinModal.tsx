@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { upgradeCandidates, useGame } from '../game/store'
 import { payoutFor, rarityLabel } from '../game/economy'
 import { Avatar, Modal, SkillChip } from './common'
@@ -6,6 +7,9 @@ import { CARD } from '../copy'
 import { sfx } from '../audio/sfx'
 
 const SOURCE_LABEL: Record<CandidateSource, string> = { jsonresume: 'JSON Resume', github: 'GitHub', mock: 'Demo' }
+
+/** Сколько навыков показывать на карточке, пока не нажали «ещё» (в резюме их бывает под сотню). */
+const SKILLS_PREVIEW = 14
 
 function yearsLabel(y?: number) {
   if (y == null) return undefined
@@ -28,6 +32,7 @@ export function WinModal() {
   const filtered = useGame((s) => s.filtered)
   const excluded = useGame((s) => s.excluded)
   const poolMax = useGame((s) => s.poolMax)
+  const [expandedFor, setExpandedFor] = useState<string | null>(null)
   const visible = winOpen && phase === 'win'
   const toShortlist = () => {
     sfx.shortlist()
@@ -72,9 +77,14 @@ export function WinModal() {
       </div>
       {c.bio && <p className="win__bio">«{c.bio.length > 220 ? c.bio.slice(0, 220) + '…' : c.bio}»</p>}
       <div className="chips">
-        {ordered.map((s) => (
+        {(expandedFor === c.id ? ordered : ordered.slice(0, Math.max(SKILLS_PREVIEW, matched.size))).map((s) => (
           <SkillChip key={s} id={s} matched={matched.has(s)} />
         ))}
+        {expandedFor !== c.id && ordered.length > Math.max(SKILLS_PREVIEW, matched.size) && (
+          <button className="chip chip--btn chip--more" onClick={() => setExpandedFor(c.id)}>
+            {CARD.moreSkills(ordered.length - Math.max(SKILLS_PREVIEW, matched.size))}
+          </button>
+        )}
       </div>
       {c.stats && (
         <div className="win__stats muted">

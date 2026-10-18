@@ -1,6 +1,6 @@
 import type { Candidate, SkillId } from '../../game/types'
-import { extractSkillsFromText, normalizeKeyword } from '../../game/skills'
-import { guessTitle } from '../roles'
+import { parseKeyword } from '../../game/skills'
+import { groupsForTitle } from '../titleGroups'
 
 export const JSONRESUME_REGISTRY = 'https://registry.jsonresume.org'
 
@@ -18,9 +18,9 @@ export interface JsonResumeRaw {
     profiles?: { network?: string; url?: string; username?: string }[]
   }
   skills: { name?: string; keywords?: string[] }[]
-  projectKeywords: string[]
-  /** Склеенные summary/highlights из опыта работы (обрезано). */
-  workText: string
+  /** Устаревшие поля старых снимков — больше не используются. */
+  projectKeywords?: string[]
+  workText?: string
   /** Самая ранняя дата начала работы (YYYY-MM-DD или YYYY). */
   firstWorkStart?: string
 }
@@ -52,47 +52,34 @@ export function compactResume(username: string, full: any): JsonResumeRaw {
         .slice(0, 6)
         .map((p) => ({ network: str(p?.network, 40), url: str(p?.url, 300), username: str(p?.username, 80) })),
     },
-    skills: arr<any>(full?.skills)
-      .slice(0, 40)
-      .map((s) => ({ name: str(s?.name, 120), keywords: arr<unknown>(s?.keywords).map((k) => str(k, 80)).filter(Boolean).slice(0, 40) as string[] })),
-    projectKeywords: arr<any>(full?.projects)
-      .flatMap((p) => arr<unknown>(p?.keywords))
-      .map((k) => str(k, 60))
-      .filter(Boolean)
-      .slice(0, 60) as string[],
-    workText: work
-      .flatMap((w) => [str(w?.position, 120), str(w?.summary, 600), ...arr<unknown>(w?.highlights).map((h) => str(h, 300))])
-      .filter(Boolean)
-      .join(' \n ')
-      .slice(0, 2500),
+    // Все группы и все навыки, без обрезки количества
+    skills: arr<any>(full?.skills).map((s) => ({
+      name: str(s?.name, 400),
+      keywords: arr<unknown>(s?.keywords).map((k) => str(k, 400)).filter(Boolean) as string[],
+    })),
     firstWorkStart: starts[0],
   }
 }
 
-export function deriveResumeSkills(raw: JsonResumeRaw): SkillId[] {
-  const score = new Map<SkillId, number>()
-  const add = (ids: SkillId[], w: number) => ids.forEach((id) => score.set(id, (score.get(id) ?? 0) + w))
-
-  raw.skills.forEach((group, gi) => {
-    const pos = Math.max(0.6, 1 - gi * 0.05) // первые группы обычно главные
-    if (group.name) add(normalizeKeyword(group.name), 1 * pos)
-    for (const k of group.keywords ?? []) add(normalizeKeyword(k), 2 * pos)
-  })
-  for (const k of raw.projectKeywords) add(normalizeKeyword(k), 1)
-  add(extractSkillsFromText(raw.basics.label), 2)
-  add(extractSkillsFromText(raw.basics.summary), 1)
-  // Опыт работы: каждое упоминание весит мало, но много упоминаний — сигнал.
-  const text = raw.workText.toLowerCase()
-  for (const id of extractSkillsFromText(raw.workText)) {
-    const mentions = Math.min(4, text.split(id).length - 1 || 1)
-    add([id], 0.6 * mentions)
+/**
+ * Навыки только из поля skills, как их указал сам человек, в порядке резюме.
+ * - skills[].keywords — навыки; skills[].name при этом — название группы («Frontend», «DevOps»), не навык;
+ * - если keywords нет — навык записан в name.
+ * Ничего не угадываем по тексту опыта/описания и не заменяем одни навыки другими; потолка на число нет.
+ */
+export function deriveResumeSkills(raw: JsonResumeRaw): { id: SkillId; label: string }[] {
+  const out: { id: SkillId; label: string }[] = []
+  const seen = new Set<SkillId>()
+  const add = (text: string | undefined) => {
+    if (!text) return
+    for (const f of parseKeyword(text)) if (!seen.has(f.id)) (seen.add(f.id), out.push(f))
   }
-
-  return [...score.entries()]
-    .filter(([, w]) => w >= 1.5)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 10)
-    .map(([s]) => s)
+  for (const group of raw.skills) {
+    const keywords = (group.keywords ?? []).filter((k) => k && k.trim())
+    if (keywords.length) keywords.forEach(add)
+    else add(group.name)
+  }
+  return out
 }
 
 function yearsSince(date?: string): number | undefined {
@@ -114,9 +101,10 @@ function safeUrl(u?: string): string | undefined {
 }
 
 export function jsonResumeToCandidate(raw: JsonResumeRaw): Candidate | null {
-  const skills = deriveResumeSkills(raw)
+  const skills = deriveResumeSkills(raw).map((s) => s.id)
   const b = raw.basics
-  if (!b.name || skills.length < 3) return null
+  // Должность только из basics.label: без неё кандидат не нужен — ничего не угадываем
+  if (!b.name || !b.label || skills.length < 3) return null
   const loc = b.location
   const links = [
     ...(b.profiles ?? []).map((p) => ({ label: p.network || 'Profile', url: safeUrl(p.url) })),
@@ -128,7 +116,8 @@ export function jsonResumeToCandidate(raw: JsonResumeRaw): Candidate | null {
     login: raw.username,
     name: b.name,
     avatarUrl: safeUrl(b.image),
-    title: b.label || guessTitle(skills),
+    title: b.label,
+    groups: groupsForTitle(b.label),
     location: [loc?.city, loc?.region && loc.region !== loc.city ? loc.region : undefined, loc?.countryCode].filter(Boolean).join(', ') || undefined,
     bio: b.summary,
     url: `${JSONRESUME_REGISTRY}/${encodeURIComponent(raw.username)}`,
