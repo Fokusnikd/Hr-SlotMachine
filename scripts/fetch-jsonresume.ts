@@ -10,10 +10,17 @@
  */
 import { resolve } from 'node:path'
 import { compactResume, JSONRESUME_REGISTRY, type JsonResumeRaw } from '../src/data/sources/jsonresume'
-import { fetchWithRetry, HttpError, loadRemoved, mapLimit, parseArgs, progress, RAW_DIR, readJson, sleep, writeJson } from './lib'
+import { fetchWithRetry, HttpError, loadRemoved, mapLimit, parseArgs, progress, RAW_DIR, readJson, ROOT, sleep, writeJson } from './lib'
 
 const LIST_FILE = resolve(RAW_DIR, 'jsonresume-usernames.json')
 const RAW_FILE = resolve(RAW_DIR, 'jsonresume.json')
+/**
+ * Запасной список username (коммитится — только имена из публичного реестра, самих резюме тут нет).
+ * Нужен, потому что эндпоинты списка реестра (/api/resumes, /explore) периодически отдают 500 или пустоту,
+ * а отдельные резюме (/api/<username>.json) при этом работают. Файл можно пополнить: `npm run db:jsonresume -- --relist`
+ * при живом реестре сам дописывает в него новые имена.
+ */
+const SEED_FILE = resolve(ROOT, 'data/jsonresume-usernames.json')
 const LIST_TTL = 7 * 24 * 3600 * 1000
 const REFETCH_AFTER = 30 * 24 * 3600 * 1000
 /** Не держим снимок дольше этого без успешного обновления — старше удаляется из кэша совсем (не «храним резюме всегда»). */
@@ -78,12 +85,24 @@ async function getUsernames(): Promise<string[]> {
       console.warn(`\n  /explore тоже не ответил: ${(e as Error).message}`)
     }
   }
+  const seed = await readJson<string[]>(SEED_FILE, [])
   if (!usernames.length) {
     if (cached) {
       console.warn('Реестр недоступен — используем старый список.')
       return cached.usernames
     }
+    if (seed.length) {
+      console.warn(`Реестр недоступен — используем запасной список из репозитория (${seed.length}).`)
+      return seed
+    }
     throw new Error('Не удалось получить список резюме. Попробуйте позже.')
+  }
+  // Реестр ответил: запасной список пополняем новыми именами (только имена; удалённых по запросу не берём).
+  const removedNow = await loadRemoved()
+  const merged = [...new Map([...seed, ...usernames].filter((u) => !removedNow.has(u.toLowerCase())).map((u) => [u.toLowerCase(), u])).values()]
+  if (merged.length > seed.length) {
+    await writeJson(SEED_FILE, merged.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase())), true)
+    console.log(`Запасной список username пополнен: ${seed.length} → ${merged.length} (закоммитьте data/jsonresume-usernames.json).`)
   }
   await writeJson(LIST_FILE, { fetchedAt: new Date().toISOString(), usernames })
   console.log(`Найдено резюме: ${usernames.length}`)
